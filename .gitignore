@@ -1,0 +1,16 @@
+node_modules/
+auth_info/
+.env
+*.log
+*.bak
+*.bak2
+.bot.js.swp
+.bot.js.swo
+meslivres/
+bible_skill/
+css/
+Apps
+Autorisations
+Autoriser
+Microphone
+Termux:API

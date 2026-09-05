@@ -1,0 +1,19 @@
+{
+  "name": "edilpa-whatsapp-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@samuraitruong/php-cookie-challenge": "^0.0.4",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "axios": "^1.20.0",
+    "dotenv": "^17.4.2",
+    "node-cron": "^4.6.0"
+  },
+  "allowScripts": {
+    "@whiskeysockets/baileys@7.0.0-rc14": true,
+    "protobufjs@7.6.4": true
+  }
+}
