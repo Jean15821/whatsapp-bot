@@ -1,5 +1,5 @@
 require("dotenv").config()
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser } = require('@whiskeysockets/baileys')
+let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
 const axios = require('axios')
 const crypto = require('crypto')
 const http = require('http')
@@ -277,4 +277,11 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Serveur HTTP actif sur le port ${PORT}`)
 })
 
-startBot()
+;(async () => {
+  const baileys = await import('@whiskeysockets/baileys')
+  makeWASocket = baileys.default
+  useMultiFileAuthState = baileys.useMultiFileAuthState
+  DisconnectReason = baileys.DisconnectReason
+  jidNormalizedUser = baileys.jidNormalizedUser
+  startBot()
+})()
