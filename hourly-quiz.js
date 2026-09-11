@@ -1,6 +1,6 @@
 const fs = require('fs');
-const path = '/data/data/com.termux/files/home/questions.json';
-const questions = JSON.parse(fs.readFileSync(path, 'utf8'));
+const path = require('path');
+const questions = JSON.parse(fs.readFileSync(path.join(__dirname, 'questions.json'), 'utf8'));
 
 function getHourlyQuestion() {
   const heure = Math.floor(Date.now() / 3600000); // change chaque heure
