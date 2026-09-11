@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@samuraitruong/php-cookie-challenge": "^0.0.4",
-    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "@whiskeysockets/baileys": "^6.7.23",
     "axios": "^1.20.0",
     "dotenv": "^17.4.2",
     "node-cron": "^4.6.0"

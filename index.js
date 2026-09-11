@@ -1,11 +1,11 @@
 require("dotenv").config()
-let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fetchLatestBaileysVersion;
 const axios = require('axios')
 const crypto = require('crypto')
 const http = require('http')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const getBackoffDelay = (attempt) => Math.min(5000 * attempt, 60000)
+const getBackoffDelay = (attempt) => Math.min(30000 * attempt, 600000)
 
 const SYSTEM_PROMPT = `Tu es un assistant biblique et théologique pour une église chrétienne (EDILPA, Église de Dieu Liberté par la Parole). Réponds aux questions avec des références bibliques précises (livre, chapitre, verset) et une explication théologique claire et simple. Sois respectueux, pastoral et concis.`
 
@@ -119,6 +119,8 @@ async function startBot(attempt = 1) {
   try {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info')
     const sock = makeWASocket({
+         version: [2, 3000, 1043857760],
+         browser: ["Ubuntu", "Chrome", "22.04.4"],
       auth: state,
       printQRInTerminal: false,
       connectTimeoutMs: 60000,
@@ -128,8 +130,9 @@ async function startBot(attempt = 1) {
     })
 
     if (!sock.authState.creds.registered) {
+      await sleep(5000)
       if (!savedPhoneNumber) {
-        savedPhoneNumber = "40627737"
+        savedPhoneNumber = "50940627737"
         if (!savedPhoneNumber) {
           process.exit(1)
         }
@@ -138,7 +141,7 @@ async function startBot(attempt = 1) {
         const code = await sock.requestPairingCode(savedPhoneNumber.trim())
         console.log('>>> Code de pairing WhatsApp:', code)
       } catch (err) {
-        console.log(`⚠️ Échec de la demande de code (tentative ${attempt}). Nouvelle tentative dans 5s...`)
+        console.log(`⚠️ Échec de la demande de code (tentative ${attempt}): ${err.message}`)
         await sleep(getBackoffDelay(attempt))
         return startBot(attempt + 1)
       }
@@ -283,5 +286,6 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   useMultiFileAuthState = baileys.useMultiFileAuthState
   DisconnectReason = baileys.DisconnectReason
   jidNormalizedUser = baileys.jidNormalizedUser
+       fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion
   startBot()
 })()
