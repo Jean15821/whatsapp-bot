@@ -109,10 +109,12 @@ function registerDailyCron() {
     if (!currentSock) return console.error('❌ Bot non connecté, publication annulée');
     try {
       await currentSock.sendMessage(CANALJID, { text: getDailyContent() });
-      console.log('✅ Verset du jour publié sur le canal');
+      console.log('✅ 🌸 PAROLE DU JOUR publiée sur le canal');
     } catch (err) {
-      console.error('❌ Échec de publication sur le canal:', err.message);
+      console.error('❌ Échec de publication de la PAROLE DU JOUR:', err.message);
     }
+  }, {
+    timezone: 'America/Port-au-Prince'
   });
 }
 
