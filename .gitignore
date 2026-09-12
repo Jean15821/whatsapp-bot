@@ -1,11 +1,8 @@
-node_modules/
 auth_info/
+auth_info_*/
+*.backup
+*.backup-*
+index.js.before-*
+veille_seen.json
+veille_pending.json
 .env
-*.log
-*.bak
-*.bak2
-.bot.js.swp
-.bot.js.swo
-meslivres/
-bible_skill/
-css/
