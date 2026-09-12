@@ -13,6 +13,7 @@ const QUIZ_API = "https://quizbib.gamer.free/api/quiz_api.php"
 const CHANNEL_LINK = "https://whatsapp.com/channel/0029Vb8Pv2sL7UVMskGv542k"
 
 let savedPhoneNumber = null
+let pairingCodeRequested = false
 let cachedCookie = null
 let cookieExpiry = 0
 
@@ -129,9 +130,12 @@ async function startBot(attempt = 1) {
       retryRequestDelayMs: 3000,
     })
 
-    // 🔐 Pairing UNIQUEMENT si aucune session WhatsApp valide n'existe
-    if (!sock.authState.creds.registered) {
-      console.log('🔐 Aucune session WhatsApp enregistrée. Pairing nécessaire.')
+    // 🔐 Pairing UNE SEULE FOIS par exécution
+    if (!sock.authState.creds.registered && !pairingCodeRequested) {
+      pairingCodeRequested = true
+
+      console.log('🔐 Aucune session WhatsApp enregistrée.')
+      console.log('📱 Demande du code de pairing UNE SEULE FOIS...')
 
       await sleep(5000)
 
@@ -142,13 +146,20 @@ async function startBot(attempt = 1) {
       try {
         const code = await sock.requestPairingCode(savedPhoneNumber.trim())
         console.log('📱 >>> CODE DE PAIRING WHATSAPP :', code)
-        console.log('💾 Après validation, la session sera sauvegardée dans auth_info/')
+        console.log('💾 Valide ce code dans WhatsApp.')
+        console.log('💾 La session sera sauvegardée dans auth_info/')
       } catch (err) {
-        console.log(`⚠️ Échec de la demande de code (tentative ${attempt}): ${err.message}`)
-        await sleep(getBackoffDelay(attempt))
-        return startBot(attempt + 1)
+        console.error('❌ Échec de la demande de code :', err.message)
+        console.log('🔄 Reconnexion sans redemander de code...')
       }
+
+    } else if (!sock.authState.creds.registered && pairingCodeRequested) {
+
+      console.log('⏳ Code de pairing déjà demandé.')
+      console.log('🔄 Reconnexion sans générer un nouveau code...')
+
     } else {
+
       console.log('🔐 Session WhatsApp déjà enregistrée.')
       console.log('✅ Aucun code de pairing demandé.')
     }
