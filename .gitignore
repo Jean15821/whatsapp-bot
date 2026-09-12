@@ -6,3 +6,12 @@ index.js.before-*
 veille_seen.json
 veille_pending.json
 .env
+node_modules/
+*.log
+*.swp
+*.swo
+*.bak
+*.bak2
+*.bak-*
+.bot.js.swp
+.bot.js.swo
