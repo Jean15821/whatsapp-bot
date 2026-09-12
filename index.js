@@ -129,22 +129,28 @@ async function startBot(attempt = 1) {
       retryRequestDelayMs: 3000,
     })
 
+    // 🔐 Pairing UNIQUEMENT si aucune session WhatsApp valide n'existe
     if (!sock.authState.creds.registered) {
+      console.log('🔐 Aucune session WhatsApp enregistrée. Pairing nécessaire.')
+
       await sleep(5000)
+
       if (!savedPhoneNumber) {
         savedPhoneNumber = "50940627737"
-        if (!savedPhoneNumber) {
-          process.exit(1)
-        }
       }
+
       try {
         const code = await sock.requestPairingCode(savedPhoneNumber.trim())
-        console.log('>>> Code de pairing WhatsApp:', code)
+        console.log('📱 >>> CODE DE PAIRING WHATSAPP :', code)
+        console.log('💾 Après validation, la session sera sauvegardée dans auth_info/')
       } catch (err) {
         console.log(`⚠️ Échec de la demande de code (tentative ${attempt}): ${err.message}`)
         await sleep(getBackoffDelay(attempt))
         return startBot(attempt + 1)
       }
+    } else {
+      console.log('🔐 Session WhatsApp déjà enregistrée.')
+      console.log('✅ Aucun code de pairing demandé.')
     }
 
     sock.ev.on('creds.update', saveCreds)
