@@ -157,41 +157,46 @@ async function startBot(attempt = 1) {
       retryRequestDelayMs: 3000,
     })
 
-    // 🔐 Pairing UNE SEULE FOIS par exécution
-    if (!sock.authState.creds.registered && !pairingCodeRequested) {
-      pairingCodeRequested = true
+    // 🔐 PAIRING WHATSAPP POUR RENDER
+if (!sock.authState.creds.registered && !pairingCodeRequested) {
+  console.log('🔐 Aucune session WhatsApp enregistrée.')
+  console.log('📱 Préparation du code de pairing...')
 
-      console.log('🔐 Aucune session WhatsApp enregistrée.')
-      console.log('📱 Demande du code de pairing UNE SEULE FOIS...')
-
-      await sleep(5000)
-
-      if (!savedPhoneNumber) {
-        savedPhoneNumber = "50940627737"
-      }
-
-      try {
-        const code = await sock.requestPairingCode(savedPhoneNumber.trim())
-        console.log('📱 >>> CODE DE PAIRING WHATSAPP :', code)
-        console.log('💾 Valide ce code dans WhatsApp.')
-        console.log('💾 La session sera sauvegardée dans auth_info/')
-      } catch (err) {
-        console.error('❌ Échec de la demande de code :', err.message)
-        console.log('🔄 Reconnexion sans redemander de code...')
-      }
-
-    } else if (!sock.authState.creds.registered && pairingCodeRequested) {
-
-      console.log('⏳ Code de pairing déjà demandé.')
-      console.log('🔄 Reconnexion sans générer un nouveau code...')
-
-    } else {
-
-      console.log('🔐 Session WhatsApp déjà enregistrée.')
-      console.log('✅ Aucun code de pairing demandé.')
+  try {
+    if (!savedPhoneNumber) {
+      savedPhoneNumber = "50940627737"
     }
 
-    sock.ev.on('creds.update', saveCreds)
+    await sleep(3000)
+
+    console.log('📱 Demande du code de pairing pour :', savedPhoneNumber)
+
+    const code = await sock.requestPairingCode(
+      savedPhoneNumber.trim()
+    )
+
+    pairingCodeRequested = true
+
+    console.log('========================================')
+    console.log('📱 CODE DE PAIRING WHATSAPP :', code)
+    console.log('========================================')
+    console.log('👉 WhatsApp > Appareils connectés')
+    console.log('👉 Connecter un appareil')
+    console.log('👉 Connecter avec un numéro de téléphone')
+    console.log('👉 Entrer le code ci-dessus')
+    console.log('========================================')
+
+  } catch (err) {
+    console.error('❌ Échec de la demande de code :', err.message)
+    pairingCodeRequested = false
+    console.log('🔄 Le prochain démarrage pourra redemander le pairing.')
+  }
+} else if (sock.authState.creds.registered) {
+  console.log('🔐 Session WhatsApp déjà enregistrée.')
+  console.log('✅ Aucun code de pairing nécessaire.')
+}
+
+sock.ev.on('creds.update', saveCreds)
 
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect } = update
