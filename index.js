@@ -82,11 +82,13 @@ const DIGIT_TO_LETTER = { '1': 'A', '2': 'B', '3': 'C', '4': 'D' }
 const cron = require('node-cron');
 const { getDailyContent } = require('./daily-content');
 const CANALJID = "120363411968127620@newsletter";
+const ADMIN_PHONE = "50940627737";
 let currentSock = null;
 let cronRegistered = false;
 let hourlyRegistered = false;
 
 const { getHourlyQuestion } = require('./hourly-quiz');
+const veille = require('./veille');
 
 function registerHourlyCron() {
   if (hourlyRegistered) return;
@@ -116,6 +118,29 @@ function registerDailyCron() {
   }, {
     timezone: 'America/Port-au-Prince'
   });
+}
+
+let veilleScanRegistered = false;
+let veilleSummaryRegistered = false;
+
+function registerVeilleScanCron() {
+  if (veilleScanRegistered) return;
+  veilleScanRegistered = true;
+  cron.schedule('0 */3 * * *', async () => {
+    if (!currentSock) return console.error('❌ Bot non connecté, veille annulée');
+    try { await veille.runScan(currentSock, CANALJID); }
+    catch (err) { console.error('❌ Échec scan veille:', err.message); }
+  });
+}
+
+function registerVeilleSummaryCron() {
+  if (veilleSummaryRegistered) return;
+  veilleSummaryRegistered = true;
+  cron.schedule('0 7 * * *', async () => {
+    if (!currentSock) return console.error('❌ Bot non connecté, résumé veille annulé');
+    try { await veille.runDailySummary(currentSock, CANALJID); }
+    catch (err) { console.error('❌ Échec résumé veille:', err.message); }
+  }, { timezone: 'America/Port-au-Prince' });
 }
 
 async function startBot(attempt = 1) {
@@ -184,6 +209,8 @@ async function startBot(attempt = 1) {
         currentSock = sock;
         registerDailyCron();
         registerHourlyCron();
+      registerVeilleScanCron();
+      registerVeilleSummaryCron();
       }
     })
 
@@ -212,6 +239,26 @@ async function startBot(attempt = 1) {
       console.log(`📩 ${from}: ${text}`)
 
       const upper = text.toUpperCase()
+    const botJid = jidNormalizedUser(sock.user.id)
+    const adminAuthorized =
+      phone === ADMIN_PHONE ||
+      from === botJid ||
+      from.split('@')[0] === botJid.split('@')[0]
+
+    if (adminAuthorized && upper === '!VEILLE') {
+      try {
+        const count = await veille.runScan(sock, CANALJID)
+        await sock.sendMessage(from, { text: `🔍 Veille lancée manuellement.\n${count} alerte(s) URGENT publiée(s).` })
+      } catch (err) {
+        await sock.sendMessage(from, { text: `⚠️ Erreur veille: ${err.message}` })
+      }
+      return
+    }
+
+    if (adminAuthorized && upper === '!VEILLE STATUS') {
+      await sock.sendMessage(from, { text: veille.getStatus() })
+      return
+    }
 
       if (!isGroup && upper === 'PRET') {
         try {

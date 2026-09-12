@@ -1,5 +1,5 @@
 require("dotenv").config()
-let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fetchLatestBaileysVersion;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser;
 const axios = require('axios')
 const crypto = require('crypto')
 const http = require('http')
@@ -119,8 +119,6 @@ async function startBot(attempt = 1) {
   try {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info')
     const sock = makeWASocket({
-         version: [2, 3000, 1043857760],
-         browser: ["Ubuntu", "Chrome", "22.04.4"],
       auth: state,
       printQRInTerminal: false,
       connectTimeoutMs: 60000,
@@ -130,7 +128,6 @@ async function startBot(attempt = 1) {
     })
 
     if (!sock.authState.creds.registered) {
-      await sleep(5000)
       if (!savedPhoneNumber) {
         savedPhoneNumber = "50940627737"
         if (!savedPhoneNumber) {
@@ -286,6 +283,5 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   useMultiFileAuthState = baileys.useMultiFileAuthState
   DisconnectReason = baileys.DisconnectReason
   jidNormalizedUser = baileys.jidNormalizedUser
-       fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion
   startBot()
 })()

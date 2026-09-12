@@ -10,7 +10,8 @@
     "@whiskeysockets/baileys": "^6.7.23",
     "axios": "^1.20.0",
     "dotenv": "^17.4.2",
-    "node-cron": "^4.6.0"
+    "node-cron": "^4.6.0",
+    "rss-parser": "^3.13.0"
   },
   "allowScripts": {
     "@whiskeysockets/baileys@7.0.0-rc14": true,
