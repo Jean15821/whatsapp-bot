@@ -3,6 +3,8 @@ let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fe
 const axios = require('axios')
 const crypto = require('crypto')
 const http = require('http')
+const fs = require('fs')
+const path = require('path')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const getBackoffDelay = (attempt) => Math.min(30000 * attempt, 600000)
@@ -145,6 +147,24 @@ function registerVeilleSummaryCron() {
 
 async function startBot(attempt = 1) {
   try {
+    // 🔐 RESTAURATION DE LA SESSION WHATSAPP SUR RENDER
+    // La session est stockée dans la variable secrète AUTH_INFO_B64.
+    if (process.env.AUTH_INFO_B64 && !fs.existsSync('auth_info/creds.json')) {
+      console.log('🔐 Restauration de la session WhatsApp depuis Render...')
+
+      const archive = Buffer.from(process.env.AUTH_INFO_B64, 'base64')
+      const archivePath = path.join(__dirname, 'auth_info.tar.gz')
+
+      fs.writeFileSync(archivePath, archive)
+
+      const { execFileSync } = require('child_process')
+      execFileSync('tar', ['-xzf', archivePath, '-C', __dirname])
+
+      fs.unlinkSync(archivePath)
+
+      console.log('✅ Session WhatsApp restaurée.')
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState('auth_info')
     const sock = makeWASocket({
          version: [2, 3000, 1043857760],
@@ -157,8 +177,9 @@ async function startBot(attempt = 1) {
       retryRequestDelayMs: 3000,
     })
 
-    // 🔐 PAIRING WHATSAPP POUR RENDER
-if (!sock.authState.creds.registered && !pairingCodeRequested) {
+    // 🔐 PAIRING LOCAL UNIQUEMENT
+    // Sur Render, aucune nouvelle demande de pairing automatique.
+    if (!state.creds.registered && !pairingCodeRequested && !process.env.AUTH_INFO_B64) {
   console.log('🔐 Aucune session WhatsApp enregistrée.')
   console.log('📱 Préparation du code de pairing...')
 
@@ -191,7 +212,7 @@ if (!sock.authState.creds.registered && !pairingCodeRequested) {
     pairingCodeRequested = false
     console.log('🔄 Le prochain démarrage pourra redemander le pairing.')
   }
-} else if (sock.authState.creds.registered) {
+} else if (state.creds.registered) {
   console.log('🔐 Session WhatsApp déjà enregistrée.')
   console.log('✅ Aucun code de pairing nécessaire.')
 }

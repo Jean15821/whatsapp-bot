@@ -18,3 +18,4 @@ node_modules/
 
 auth_info/
 auth_info.tar.gz
+auth_info.base64
