@@ -84,12 +84,41 @@ const DIGIT_TO_LETTER = { '1': 'A', '2': 'B', '3': 'C', '4': 'D' }
 const cron = require('node-cron');
 const { getDailyContent } = require('./daily-content');
 const CANALJID = "120363411968127620@newsletter";
+const { construireQuiz } = require("./quiz-canal");
+const { enregistrerReponse } = require('./quiz-reponses');
 const ADMIN_PHONE = "50940627737";
+let canalQuizCronRegistered = false;
 let currentSock = null;
 let cronRegistered = false;
 let hourlyRegistered = false;
 
 const { getHourlyQuestion } = require('./hourly-quiz');
+function registerCanalQuizCron() {
+  if (canalQuizCronRegistered) return;
+  canalQuizCronRegistered = true;
+
+  cron.schedule("0 */2 * * *", async () => {
+    if (!currentSock) {
+      console.error("❌ Bot non connecté, quiz canal annulé");
+      return;
+    }
+
+    try {
+      const quiz = construireQuiz();
+      fs.writeFileSync(
+          path.join(__dirname, 'quiz-actuel.json'),
+          JSON.stringify(quiz, null, 2) + '\n'
+        );
+        await currentSock.sendMessage(CANALJID, { text: quiz.texte });
+      console.log("✅ Quiz biblique publié dans le canal");
+    } catch (err) {
+      console.error("❌ Erreur publication quiz canal :", err.message);
+    }
+  });
+
+  console.log("🧠 Quiz automatique du canal activé : toutes les 2 heures");
+}
+
 const veille = require('./veille');
 
 function registerHourlyCron() {
@@ -312,6 +341,7 @@ sock.ev.on('creds.update', saveCreds)
         currentSock = sock;
         registerDailyCron();
         registerHourlyCron();
+        registerCanalQuizCron();
       registerVeilleScanCron();
       registerVeilleSummaryCron();
       }
@@ -369,6 +399,47 @@ sock.ev.on('creds.update', saveCreds)
       await sock.sendMessage(from, { text: veille.getStatus() })
       return
     }
+
+
+      // === QUIZ_INTERACTIF ===
+      if (!isGroup && ['A', 'B', 'C', 'D'].includes(upper)) {
+        try {
+          const quizFile = path.join(__dirname, 'quiz-actuel.json');
+
+          if (!fs.existsSync(quizFile)) {
+            await sock.sendMessage(from, {
+              text: '⏳ Aucun quiz actif pour le moment. Attends la prochaine question.'
+            });
+            return;
+          }
+
+          const quizActuel = JSON.parse(
+            fs.readFileSync(quizFile, 'utf8')
+          );
+
+          const resultat = enregistrerReponse(
+            phone || from,
+            quizActuel,
+            upper
+          );
+
+          await sock.sendMessage(from, {
+            text: resultat.message
+          });
+
+          console.log(
+            `🧠 Réponse quiz : ${upper} | question ${quizActuel.id} | valide=${resultat.valide}`
+          );
+
+        } catch (err) {
+          console.error('❌ Erreur réponse quiz:', err);
+          await sock.sendMessage(from, {
+            text: '⚠️ Impossible de traiter ta réponse pour le moment.'
+          });
+        }
+
+        return;
+      }
 
       if (!isGroup && upper === 'PRET') {
         try {

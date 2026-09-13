@@ -19,3 +19,14 @@ node_modules/
 auth_info/
 auth_info.tar.gz
 auth_info.base64
+
+# Fichiers temporaires / tests du quiz
+quiz-actuel.json
+resultats-quiz.json
+reponses-a-verifier.json
+ameliorer-reponses.js
+corriger-restants.js
+finaliser-reponses.js
+generer-reponses.js
+index.js.sauvegarde-quiz-interactif
+index.js.backup
