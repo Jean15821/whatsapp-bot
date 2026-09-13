@@ -109,31 +109,108 @@ function registerHourlyCron() {
 function registerDailyCron() {
   if (cronRegistered) return;
   cronRegistered = true;
-  cron.schedule('0 6 * * *', async () => {
-    if (!currentSock) return console.error('❌ Bot non connecté, publication annulée');
-    try {
-      await currentSock.sendMessage(CANALJID, { text: getDailyContent() });
-      console.log('✅ 🌸 PAROLE DU JOUR publiée sur le canal');
-    } catch (err) {
-      console.error('❌ Échec de publication de la PAROLE DU JOUR:', err.message);
+
+  const DAILY_FILE = path.join(__dirname, 'parole_last_sent.json');
+
+  function todayKey() {
+    return new Date().toLocaleDateString('en-CA', {
+      timeZone: 'America/Port-au-Prince'
+    });
+  }
+
+  async function publishMorningWord() {
+    if (!currentSock) {
+      console.log('⏳ WhatsApp non connecté : Parole du jour attendra la prochaine vérification.');
+      return;
     }
-  }, {
+
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Port-au-Prince',
+      hour: 'numeric',
+      hour12: false
+    }).formatToParts(now);
+
+    const hour = Number(parts.find(p => p.type === 'hour')?.value || 0);
+
+    // Publication uniquement le matin : 06h00 à 11h59
+    if (hour < 6 || hour >= 12) return;
+
+    let lastSent = null;
+    try {
+      lastSent = JSON.parse(fs.readFileSync(DAILY_FILE, 'utf8')).date;
+    } catch {}
+
+    // Une seule Parole du jour par date
+    if (lastSent === todayKey()) return;
+
+    try {
+      await currentSock.sendMessage(CANALJID, {
+        text: getDailyContent()
+      });
+
+      fs.writeFileSync(
+        DAILY_FILE,
+        JSON.stringify({
+          date: todayKey(),
+          sentAt: new Date().toISOString()
+        }, null, 2)
+      );
+
+      console.log('✅ 🌸 PAROLE DU JOUR publiée ce matin');
+    } catch (err) {
+      console.error('❌ Échec publication PAROLE DU JOUR:', err.message);
+    }
+  }
+
+  // Vérification toutes les 30 minutes pendant la matinée.
+  cron.schedule('*/30 6-11 * * *', publishMorningWord, {
     timezone: 'America/Port-au-Prince'
   });
+
+  // Vérification immédiate après connexion.
+  setTimeout(publishMorningWord, 15000);
+
+  console.log('🌸 Parole du jour activée : publication entre 06h00 et 11h59.');
 }
 
 let veilleScanRegistered = false;
-let veilleSummaryRegistered = false;
+let veilleLastRun = null;
 
 function registerVeilleScanCron() {
   if (veilleScanRegistered) return;
   veilleScanRegistered = true;
-  cron.schedule('0 */3 * * *', async () => {
-    if (!currentSock) return console.error('❌ Bot non connecté, veille annulée');
-    try { await veille.runScan(currentSock, CANALJID); }
-    catch (err) { console.error('❌ Échec scan veille:', err.message); }
+
+  const runVeille = async () => {
+    if (!currentSock) {
+      console.error('❌ Bot non connecté, veille reportée');
+      return;
+    }
+
+    try {
+      await veille.runScan(currentSock, CANALJID, false);
+      veilleLastRun = Date.now();
+      console.log('✅ 🔎 Veille exécutée');
+    } catch (err) {
+      console.error('❌ Échec scan veille:', err.message);
+    }
+  };
+
+  // Toutes les 3 heures
+  cron.schedule('* * * * *', runVeille, {
+    timezone: 'America/Port-au-Prince'
   });
+
+  // Rattrapage après réveil/reconnexion de Render
+  setTimeout(async () => {
+    console.log('🔄 Vérification veille après connexion...');
+    await runVeille();
+  }, 20000);
+
+  console.log('✅ 🔎 Cron veille activé : toutes les 3 heures + rattrapage au réveil');
 }
+
+let veilleSummaryRegistered = false;
 
 function registerVeilleSummaryCron() {
   if (veilleSummaryRegistered) return;
@@ -254,7 +331,11 @@ sock.ev.on('creds.update', saveCreds)
       if (!text) return
 
       const selfJid = jidNormalizedUser(sock.user.id)
-      const isSelfChat = from === selfJid
+      const selfLid = sock.user?.lid ? jidNormalizedUser(sock.user.lid) : null
+      const isSelfChat =
+        from === selfJid ||
+        (selfLid && from === selfLid) ||
+        (from.endsWith('@lid') && from.split('@')[0] === selfLid?.split('@')[0])
 
       if (text.includes('Vérifie toujours les versets')) return
       if (msg.key.fromMe && !isSelfChat) return
@@ -266,14 +347,17 @@ sock.ev.on('creds.update', saveCreds)
 
       const upper = text.toUpperCase()
     const botJid = jidNormalizedUser(sock.user.id)
+    const ADMIN_LID = "130472835305511@lid"
+
     const adminAuthorized =
       phone === ADMIN_PHONE ||
+      from === ADMIN_LID ||
       from === botJid ||
       from.split('@')[0] === botJid.split('@')[0]
 
     if (adminAuthorized && upper === '!VEILLE') {
       try {
-        const count = await veille.runScan(sock, CANALJID)
+        const count = await veille.runScan(sock, CANALJID, false)
         await sock.sendMessage(from, { text: `🔍 Veille lancée manuellement.\n${count} alerte(s) URGENT publiée(s).` })
       } catch (err) {
         await sock.sendMessage(from, { text: `⚠️ Erreur veille: ${err.message}` })
