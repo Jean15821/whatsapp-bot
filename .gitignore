@@ -30,3 +30,6 @@ finaliser-reponses.js
 generer-reponses.js
 index.js.sauvegarde-quiz-interactif
 index.js.backup
+
+AUTH_INFO_B64.txt
+auth_info.tar.gz

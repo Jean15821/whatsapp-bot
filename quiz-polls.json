@@ -1,0 +1,74 @@
+{
+  "81fdb53d4a79f755745e985daf4368d0": {
+    "pollMessageId": "81fdb53d4a79f755745e985daf4368d0",
+    "numero": 4,
+    "id": 961,
+    "question": "Quel roi a demandé un signe avec le recul de l’ombre ?",
+    "options": {
+      "A": "Ézéchias",
+      "B": "David",
+      "C": "Salomon",
+      "D": "Josias"
+    },
+    "bonne": "A",
+    "explication": "Dieu donna un signe à Ézéchias par le recul de l’ombre.",
+    "reference": "",
+    "messageSecret": "X+Fi2nKyTDp1RX7YEaSiM+e+ncigOi9isXw2h4FPTTA=",
+    "participants": {},
+    "date": "2026-09-14T03:56:30.209Z"
+  },
+  "5c73c6ec011b1b077b3e6927b2d6d084": {
+    "pollMessageId": "5c73c6ec011b1b077b3e6927b2d6d084",
+    "numero": 5,
+    "id": 473,
+    "question": "Quel roi fut connu comme un homme selon le cœur de Dieu ?",
+    "options": {
+      "A": "David",
+      "B": "Saül",
+      "C": "Salomon",
+      "D": "Ézéchias"
+    },
+    "bonne": "A",
+    "explication": "David est appelé homme selon le cœur de Dieu.",
+    "reference": "",
+    "messageSecret": "0xwC0Rq/3FbSWg83AaIACwq3fucYryv311Bhm7zFXhw=",
+    "participants": {},
+    "date": "2026-09-14T04:09:06.283Z"
+  },
+  "88425060521f5b42289115c9782bafea": {
+    "pollMessageId": "88425060521f5b42289115c9782bafea",
+    "numero": 6,
+    "id": 660,
+    "question": "Quel disciple a douté avant de voir les marques de Jésus ressuscité ?",
+    "options": {
+      "A": "Thomas",
+      "B": "Pierre",
+      "C": "Jean",
+      "D": "Matthieu"
+    },
+    "bonne": "A",
+    "explication": "Thomas voulait voir avant de croire.",
+    "reference": "",
+    "messageSecret": "pukMhdgyZ12roWZvBOfZlzmunC8P+YQwGqPGvPKK3HQ=",
+    "participants": {},
+    "date": "2026-09-14T04:09:13.440Z"
+  },
+  "6a2aea24f142bba19b11c09e8434d223": {
+    "pollMessageId": "6a2aea24f142bba19b11c09e8434d223",
+    "numero": 7,
+    "id": 1231,
+    "question": "Quel livre parle de l'amour comme un don spirituel important ?",
+    "options": {
+      "A": "1 Corinthiens",
+      "B": "2 Timothée",
+      "C": "Apocalypse",
+      "D": "Colossiens"
+    },
+    "bonne": "A",
+    "explication": "1 Corinthiens 13 présente le chapitre de l'amour.",
+    "reference": "",
+    "messageSecret": "7e/kvf3vgd65QVT3YIUWm1XkEgYHdw5eeszhE2eB5dY=",
+    "participants": {},
+    "date": "2026-09-14T04:50:47.370Z"
+  }
+}

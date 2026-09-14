@@ -147,6 +147,7 @@ function registerDailyCron() {
   cronRegistered = true;
 
   const DAILY_FILE = path.join(__dirname, 'parole_last_sent.json');
+  let dailyPublishLock = false;
 
   function todayKey() {
     return new Date().toLocaleDateString('en-CA', {
@@ -177,8 +178,19 @@ function registerDailyCron() {
       lastSent = JSON.parse(fs.readFileSync(DAILY_FILE, 'utf8')).date;
     } catch {}
 
-    // Une seule Parole du jour par date
-    if (lastSent === todayKey()) return;
+    // Une seule Parole du jour par date.
+    // Verrou mémoire : empêche deux appels simultanés.
+    if (dailyPublishLock) {
+      console.log('⏳ Publication Parole du jour déjà en cours.');
+      return;
+    }
+
+    if (lastSent === todayKey()) {
+      console.log('⏭️ Parole du jour déjà publiée aujourd’hui.');
+      return;
+    }
+
+    dailyPublishLock = true;
 
     try {
       await currentSock.sendMessage(CANALJID, {
@@ -196,6 +208,8 @@ function registerDailyCron() {
       console.log('✅ 🌸 PAROLE DU JOUR publiée ce matin');
     } catch (err) {
       console.error('❌ Échec publication PAROLE DU JOUR:', err.message);
+    } finally {
+      dailyPublishLock = false;
     }
   }
 
@@ -232,8 +246,12 @@ async function startBot(attempt = 1) {
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+    const { version, isLatest } = await fetchLatestBaileysVersion()
+    console.log('🌐 Version WhatsApp détectée :', version, '| Dernière :', isLatest)
+
     const sock = makeWASocket({
-         version: [2, 3000, 1043857760],
+         version,
          browser: ["Ubuntu", "Chrome", "22.04.4"],
       auth: state,
       printQRInTerminal: false,
