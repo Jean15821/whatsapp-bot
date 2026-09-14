@@ -84,55 +84,49 @@ const DIGIT_TO_LETTER = { '1': 'A', '2': 'B', '3': 'C', '4': 'D' }
 const cron = require('node-cron');
 const { getDailyContent } = require('./daily-content');
 const CANALJID = "120363411968127620@newsletter";
-const { construireQuiz } = require("./quiz-canal");
+const {
+  publierQuizCanal,
+  chargerQuizActuel,
+  construireRevelation
+} = require("./quiz-poll-canal");
 const { enregistrerReponse } = require('./quiz-reponses');
 const ADMIN_PHONE = "50940627737";
 let canalQuizCronRegistered = false;
 let currentSock = null;
 let cronRegistered = false;
-let hourlyRegistered = false;
-
-const { getHourlyQuestion } = require('./hourly-quiz');
 function registerCanalQuizCron() {
   if (canalQuizCronRegistered) return;
   canalQuizCronRegistered = true;
 
-  cron.schedule("0 */2 * * *", async () => {
+  const publierQuiz = async () => {
     if (!currentSock) {
-      console.error("❌ Bot non connecté, quiz canal annulé");
+      console.error("❌ Bot non connecté, poll annulé");
       return;
     }
 
     try {
-      const quiz = construireQuiz();
-      fs.writeFileSync(
-          path.join(__dirname, 'quiz-actuel.json'),
-          JSON.stringify(quiz, null, 2) + '\n'
-        );
-        await currentSock.sendMessage(CANALJID, { text: quiz.texte });
-      console.log("✅ Quiz biblique publié dans le canal");
+      await publierQuizCanal(currentSock);
+
+      console.log(
+        "✅ VRAI POLL WHATSAPP publié dans le canal"
+      );
     } catch (err) {
-      console.error("❌ Erreur publication quiz canal :", err.message);
+      console.error(
+        "❌ Erreur publication poll :",
+        err.message
+      );
     }
-  });
+  };
 
-  console.log("🧠 Quiz automatique du canal activé : toutes les 2 heures");
-}
+  // Premier quiz immédiatement après la connexion.
+  setTimeout(publierQuiz, 10000);
 
-const veille = require('./veille');
+  // Ensuite, un nouveau quiz toutes les heures.
+  cron.schedule("0 * * * *", publierQuiz);
 
-function registerHourlyCron() {
-  if (hourlyRegistered) return;
-  hourlyRegistered = true;
-  cron.schedule('0 * * * *', async () => {
-    if (!currentSock) return console.error('❌ Bot non connecté, question horaire annulée');
-    try {
-      await currentSock.sendMessage(CANALJID, { text: getHourlyQuestion() });
-      console.log('✅ Question horaire publiée sur le canal');
-    } catch (err) {
-      console.error('❌ Échec publication question horaire:', err.message);
-    }
-  });
+  console.log(
+    "🧠 Quiz NATIF WhatsApp activé : immédiatement puis toutes les heures"
+  );
 }
 
 function registerDailyCron() {
@@ -203,53 +197,6 @@ function registerDailyCron() {
   console.log('🌸 Parole du jour activée : publication entre 06h00 et 11h59.');
 }
 
-let veilleScanRegistered = false;
-let veilleLastRun = null;
-
-function registerVeilleScanCron() {
-  if (veilleScanRegistered) return;
-  veilleScanRegistered = true;
-
-  const runVeille = async () => {
-    if (!currentSock) {
-      console.error('❌ Bot non connecté, veille reportée');
-      return;
-    }
-
-    try {
-      await veille.runScan(currentSock, CANALJID, false);
-      veilleLastRun = Date.now();
-      console.log('✅ 🔎 Veille exécutée');
-    } catch (err) {
-      console.error('❌ Échec scan veille:', err.message);
-    }
-  };
-
-  // Toutes les 3 heures
-  cron.schedule('* * * * *', runVeille, {
-    timezone: 'America/Port-au-Prince'
-  });
-
-  // Rattrapage après réveil/reconnexion de Render
-  setTimeout(async () => {
-    console.log('🔄 Vérification veille après connexion...');
-    await runVeille();
-  }, 20000);
-
-  console.log('✅ 🔎 Cron veille activé : toutes les 3 heures + rattrapage au réveil');
-}
-
-let veilleSummaryRegistered = false;
-
-function registerVeilleSummaryCron() {
-  if (veilleSummaryRegistered) return;
-  veilleSummaryRegistered = true;
-  cron.schedule('0 7 * * *', async () => {
-    if (!currentSock) return console.error('❌ Bot non connecté, résumé veille annulé');
-    try { await veille.runDailySummary(currentSock, CANALJID); }
-    catch (err) { console.error('❌ Échec résumé veille:', err.message); }
-  }, { timezone: 'America/Port-au-Prince' });
-}
 
 async function startBot(attempt = 1) {
   try {
@@ -339,11 +286,19 @@ sock.ev.on('creds.update', saveCreds)
       } else if (connection === 'open') {
         console.log('✅ Bot biblique connecté à WhatsApp — répond à tous (+ toi dans "Tú")')
         currentSock = sock;
+        if (process.env.TEST_POLL_ONCE === "1") {
+          console.log("🧪 TEST UNIQUE : publication du sondage natif...");
+          setTimeout(async () => {
+            try {
+              await publierQuizCanal(currentSock);
+              console.log("✅ TEST POLL NATIF RÉUSSI");
+            } catch (err) {
+              console.error("❌ TEST POLL NATIF ÉCHEC :", err.message);
+            }
+          }, 3000);
+        }
         registerDailyCron();
-        registerHourlyCron();
         registerCanalQuizCron();
-      registerVeilleScanCron();
-      registerVeilleSummaryCron();
       }
     })
 
@@ -384,21 +339,6 @@ sock.ev.on('creds.update', saveCreds)
       from === ADMIN_LID ||
       from === botJid ||
       from.split('@')[0] === botJid.split('@')[0]
-
-    if (adminAuthorized && upper === '!VEILLE') {
-      try {
-        const count = await veille.runScan(sock, CANALJID, false)
-        await sock.sendMessage(from, { text: `🔍 Veille lancée manuellement.\n${count} alerte(s) URGENT publiée(s).` })
-      } catch (err) {
-        await sock.sendMessage(from, { text: `⚠️ Erreur veille: ${err.message}` })
-      }
-      return
-    }
-
-    if (adminAuthorized && upper === '!VEILLE STATUS') {
-      await sock.sendMessage(from, { text: veille.getStatus() })
-      return
-    }
 
 
       // === QUIZ_INTERACTIF ===

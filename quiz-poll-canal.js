@@ -132,10 +132,14 @@ ${q.question}
   });
 
   const messageId = crypto.randomBytes(16).toString('hex');
+  const messageSecret = crypto.randomBytes(32);
 
   await sock.relayMessage(
     CANALJID,
     {
+      messageContextInfo: {
+        messageSecret
+      },
       pollCreationMessage
     },
     {
