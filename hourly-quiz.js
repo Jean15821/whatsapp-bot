@@ -1,11 +1,27 @@
 const fs = require('fs');
 const path = require('path');
-const questions = JSON.parse(fs.readFileSync(path.join(__dirname, 'questions.json'), 'utf8'));
+
+const questions = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'questions.json'), 'utf8')
+);
 
 function getHourlyQuestion() {
-  const heure = Math.floor(Date.now() / 3600000); // change chaque heure
+  const heure = Math.floor(Date.now() / 3600000);
   const q = questions[heure % questions.length];
-  return `🏆 *QUIZ BIBLIQUE - Question du moment*\n\n${q.question}\n\nA. ${q.option_a}\nB. ${q.option_b}\nC. ${q.option_c}\nD. ${q.option_d}\n\n📲 Écris *JOUER* à ce numéro pour jouer : wa.me/50940627737`;
+
+  const reference = q.reference || q.verset || q.ref || '';
+
+  return `🏆 *QUIZ BIBLIQUE - QUESTION DU MOMENT*
+
+${q.question}
+
+A. ${q.option_a}
+B. ${q.option_b}
+C. ${q.option_c}
+D. ${q.option_d}
+
+${reference ? `📖 *Référence :* ${reference}\n\n` : ''}
+👉 _Réponds avec A, B, C ou D_`;
 }
 
 module.exports = { getHourlyQuestion };

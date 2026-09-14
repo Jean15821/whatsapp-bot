@@ -1,19 +1,23 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-let proto;
 
-async function getBaileysProto() {
-  if (!proto) {
+let proto = null;
+let decryptPollVote = null;
+
+async function getBaileys() {
+  if (!proto || !decryptPollVote) {
     const b = await import('@whiskeysockets/baileys');
     proto = b.proto;
+    decryptPollVote = b.decryptPollVote;
   }
-  return proto;
+  return { proto, decryptPollVote };
 }
 
 const QUESTIONS_FILE = path.join(__dirname, 'questions.json');
 const REPONSES_FILE = path.join(__dirname, 'reponses-quiz.json');
 const QUIZ_FILE = path.join(__dirname, 'quiz-actuel.json');
+const POLLS_FILE = path.join(__dirname, 'quiz-polls.json');
 
 const CANALJID = "120363411968127620@newsletter";
 
@@ -39,6 +43,27 @@ function chargerReponses() {
   }
 
   return new Map(r.map(x => [Number(x.id), x]));
+}
+
+function chargerPolls() {
+  if (!fs.existsSync(POLLS_FILE)) return {};
+
+  try {
+    const data = JSON.parse(
+      fs.readFileSync(POLLS_FILE, 'utf8')
+    );
+
+    return data && typeof data === 'object' ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function sauvegarderPolls(data) {
+  fs.writeFileSync(
+    POLLS_FILE,
+    JSON.stringify(data, null, 2) + '\n'
+  );
 }
 
 function numeroQuiz() {
@@ -69,7 +94,9 @@ function choisirQuestion() {
   });
 
   if (!valides.length) {
-    throw new Error('Aucune question avec réponse A-D valide');
+    throw new Error(
+      'Aucune question avec réponse A-D valide'
+    );
   }
 
   return valides[
@@ -78,8 +105,9 @@ function choisirQuestion() {
 }
 
 async function publierQuizCanal(sock) {
-  const p = await getBaileysProto();
-  if (!sock) throw new Error('Socket WhatsApp absent');
+  if (!sock) {
+    throw new Error('Socket WhatsApp absent');
+  }
 
   const q = choisirQuestion();
   const reponses = chargerReponses();
@@ -87,17 +115,6 @@ async function publierQuizCanal(sock) {
 
   const bonne = String(r.answer).toUpperCase();
   const numero = numeroQuiz();
-
-  const options = [
-    { optionName: `A. ${q.option_a}` },
-    { optionName: `B. ${q.option_b}` },
-    { optionName: `C. ${q.option_c}` },
-    { optionName: `D. ${q.option_d}` }
-  ];
-
-  const bonneOption = {
-    optionName: `${bonne}. ${q[`option_${bonne.toLowerCase()}`]}`
-  };
 
   const quiz = {
     numero,
@@ -116,57 +133,38 @@ async function publierQuizCanal(sock) {
     date: new Date().toISOString()
   };
 
-  // Message d'introduction
-  await sock.sendMessage(CANALJID, {
-    text:
-`🏆 *QUIZ BIBLIQUE EDILPA*
+  const reference = quiz.reference
+    ? `\n📖 *Référence :* ${quiz.reference}\n`
+    : '';
 
-📖 *Question ${numero}/10*
+  const message =
+`🏆 *QUIZ BIBLIQUE - QUESTION DU MOMENT*
 
 ${q.question}
 
-👇 *Vote directement dans le quiz ci-dessous.*`
+A. ${q.option_a}
+B. ${q.option_b}
+C. ${q.option_c}
+D. ${q.option_d}
+${reference}
+👉 _Réponds avec A, B, C ou D_
+
+📲 Écris *JOUER* à ce numéro pour jouer :
+wa.me/50940627737`;
+
+  await sock.sendMessage(CANALJID, {
+    text: message
   });
-
-  // Construction DIRECTE du protobuf WhatsApp.
-  // Important : on ne passe PAS par sendMessage({ poll: ... }),
-  // car Baileys 6.7.23 supprime pollType et correctAnswer
-  // dans son générateur standard.
-  const pollCreationMessage = p.Message.PollCreationMessage.fromObject({
-    name: q.question,
-    options,
-    selectableOptionsCount: 1,
-    pollType: 1, // QUIZ
-    correctAnswer: bonneOption
-  });
-
-  const messageId = crypto.randomBytes(16).toString('hex');
-  const messageSecret = crypto.randomBytes(32);
-
-  await sock.relayMessage(
-    CANALJID,
-    {
-      messageContextInfo: {
-        messageSecret
-      },
-      pollCreationMessage
-    },
-    {
-      messageId
-    }
-  );
-
-  quiz.pollMessageId = messageId;
 
   fs.writeFileSync(
     QUIZ_FILE,
     JSON.stringify(quiz, null, 2) + '\n'
   );
 
-  console.log(`✅ QUIZ NATIF PROTOBUF PUBLIÉ — Question ${numero}/10`);
-  console.log(`🆔 Poll ID: ${messageId}`);
-  console.log(`🎯 Type: QUIZ`);
-  console.log(`✅ Bonne réponse: ${bonne}`);
+  console.log(
+    `✅ QUIZ DIRECT PUBLIÉ — Question ${numero}`
+  );
+  console.log(`🎯 Bonne réponse : ${bonne}`);
 
   return quiz;
 }
@@ -183,25 +181,182 @@ function chargerQuizActuel() {
   }
 }
 
+function trouverPoll(pollMessageId) {
+  const polls = chargerPolls();
+  return polls[pollMessageId] || null;
+}
+
 function construireRevelation(quiz) {
   if (!quiz) return null;
 
-  return `📖 *RÉPONSE — QUIZ N°${quiz.numero}*
+  return
+`📖 *RÉPONSE — QUIZ N°${quiz.numero}*
 
 ✅ *Bonne réponse :*
 ${quiz.bonne}. ${quiz.options[quiz.bonne]}
 
-📚 *Référence biblique :*
+📚 *Référence biblique:*
 ${quiz.reference || 'Voir la question biblique.'}
 
-💡 *Explication :*
+💡 *Explication:*
 ${quiz.explication || 'Continue à étudier la Parole de Dieu.'}
 
 🏆 *Parole & Défi | EDILPA*`;
 }
 
+async function traiterVoteSondage(msg) {
+  const content = msg?.message;
+
+  if (!content?.pollUpdateMessage) {
+    return null;
+  }
+
+  const update = content.pollUpdateMessage;
+  const creationKey = update.pollCreationMessageKey;
+
+  if (!creationKey?.id) {
+    console.error('❌ Vote sans pollMessageId');
+    return null;
+  }
+
+  const pollMessageId = creationKey.id;
+  const poll = trouverPoll(pollMessageId);
+
+  if (!poll) {
+    console.warn(
+      `⚠️ Sondage inconnu : ${pollMessageId}`
+    );
+    return null;
+  }
+
+  const { decryptPollVote } = await getBaileys();
+
+  const voterJid =
+    msg.key.participant ||
+    msg.key.remoteJid;
+
+  if (!voterJid) {
+    console.error('❌ Votant introuvable');
+    return null;
+  }
+
+  const creatorJid =
+    creationKey.participant ||
+    creationKey.remoteJid ||
+    CANALJID;
+
+  const pollEncKey =
+    Buffer.from(poll.messageSecret, 'base64');
+
+  let vote;
+
+  try {
+    vote = decryptPollVote(
+      update.vote,
+      {
+        pollEncKey,
+        pollCreatorJid: creatorJid,
+        pollMsgId: pollMessageId,
+        voterJid
+      }
+    );
+  } catch (err) {
+    console.error(
+      '❌ Échec déchiffrement vote :',
+      err.message
+    );
+
+    return null;
+  }
+
+  const selectedHashes =
+    vote?.selectedOptions || [];
+
+  if (!selectedHashes.length) {
+    return null;
+  }
+
+  const optionIndexByHash = {};
+
+  const optionNames = [
+    `A. ${poll.options.A}`,
+    `B. ${poll.options.B}`,
+    `C. ${poll.options.C}`,
+    `D. ${poll.options.D}`
+  ];
+
+  for (let i = 0; i < optionNames.length; i++) {
+    const hash = crypto
+      .createHash('sha256')
+      .update(optionNames[i])
+      .digest('hex');
+
+    optionIndexByHash[hash] =
+      ['A', 'B', 'C', 'D'][i];
+  }
+
+  let lettre = null;
+
+  for (const selected of selectedHashes) {
+    const hash = Buffer.from(selected)
+      .toString('hex');
+
+    if (optionIndexByHash[hash]) {
+      lettre = optionIndexByHash[hash];
+      break;
+    }
+  }
+
+  if (!lettre) {
+    console.warn(
+      '⚠️ Option votée impossible à identifier'
+    );
+
+    return null;
+  }
+
+  const polls = chargerPolls();
+
+  if (!polls[pollMessageId].participants) {
+    polls[pollMessageId].participants = {};
+  }
+
+  const participants =
+    polls[pollMessageId].participants;
+
+  if (participants[voterJid]) {
+    return {
+      dejaRepondu: true,
+      poll,
+      lettre,
+      voterJid
+    };
+  }
+
+  const bonne =
+    lettre === poll.bonne;
+
+  participants[voterJid] = {
+    reponse: lettre,
+    bonne,
+    date: new Date().toISOString()
+  };
+
+  sauvegarderPolls(polls);
+
+  return {
+    valide: true,
+    poll,
+    lettre,
+    bonne,
+    voterJid
+  };
+}
+
 module.exports = {
   publierQuizCanal,
   chargerQuizActuel,
-  construireRevelation
+  construireRevelation,
+  traiterVoteSondage,
+  trouverPoll
 };

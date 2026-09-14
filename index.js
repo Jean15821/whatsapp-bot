@@ -87,9 +87,11 @@ const CANALJID = "120363411968127620@newsletter";
 const {
   publierQuizCanal,
   chargerQuizActuel,
-  construireRevelation
+  construireRevelation,
+  traiterVoteSondage
 } = require("./quiz-poll-canal");
 const { enregistrerReponse } = require('./quiz-reponses');
+const { saveFacebookPost } = require('./facebook-post');
 const ADMIN_PHONE = "50940627737";
 let canalQuizCronRegistered = false;
 let currentSock = null;
@@ -100,7 +102,7 @@ function registerCanalQuizCron() {
 
   const publierQuiz = async () => {
     if (!currentSock) {
-      console.error("❌ Bot non connecté, poll annulé");
+      console.error("❌ Bot non connecté, quiz annulé");
       return;
     }
 
@@ -108,11 +110,22 @@ function registerCanalQuizCron() {
       await publierQuizCanal(currentSock);
 
       console.log(
-        "✅ VRAI POLL WHATSAPP publié dans le canal"
+        "✅ QUIZ DIRECT WHATSAPP publié dans le canal"
       );
+
+      // Préparer également la publication Facebook.
+      try {
+        saveFacebookPost();
+        console.log("📘 Publication Facebook préparée.");
+      } catch (fbErr) {
+        console.error(
+          "❌ Erreur préparation Facebook :",
+          fbErr.message
+        );
+      }
     } catch (err) {
       console.error(
-        "❌ Erreur publication poll :",
+        "❌ Erreur publication quiz :",
         err.message
       );
     }
@@ -291,9 +304,9 @@ sock.ev.on('creds.update', saveCreds)
           setTimeout(async () => {
             try {
               await publierQuizCanal(currentSock);
-              console.log("✅ TEST POLL NATIF RÉUSSI");
+              console.log("✅ TEST QUIZ DIRECT RÉUSSI");
             } catch (err) {
-              console.error("❌ TEST POLL NATIF ÉCHEC :", err.message);
+              console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message);
             }
           }, 3000);
         }
@@ -305,6 +318,56 @@ sock.ev.on('creds.update', saveCreds)
     sock.ev.on('messages.upsert', async ({ messages }) => {
       const msg = messages[0]
       if (!msg.message) return
+
+      // === VOTE NATIF DU QUIZ DANS LE CANAL ===
+      if (msg.message.pollUpdateMessage) {
+        try {
+          const resultat = await traiterVoteSondage(msg)
+
+          if (resultat?.valide) {
+            const poll = resultat.poll
+            const choix = resultat.lettre
+
+            console.log(
+              `🗳️ VOTE CANAL : ${resultat.voterJid} | ` +
+              `question ${poll.numero} | choix ${choix} | ` +
+              `correct=${resultat.bonne}`
+            )
+
+            const message = resultat.bonne
+              ? `✅ *BONNE RÉPONSE !*
+
+🎉 Bravo !
+🧠 Réponse : *${choix}. ${poll.options[choix]}*
+
+📖 *Explication :*
+${poll.explication || 'Continue à étudier la Parole de Dieu.'}
+
+🏆 *Parole & Défi | EDILPA*`
+              : `❌ *MAUVAISE RÉPONSE*
+
+🧠 Ta réponse : *${choix}. ${poll.options[choix]}*
+✅ La bonne réponse était : *${poll.bonne}. ${poll.options[poll.bonne]}*
+
+📖 *Explication :*
+${poll.explication || 'Continue à étudier la Parole de Dieu.'}
+
+🏆 *Parole & Défi | EDILPA*`
+
+            await sock.sendMessage(resultat.voterJid, {
+              text: message
+            })
+          }
+
+          return
+        } catch (err) {
+          console.error(
+            '❌ Erreur traitement vote natif :',
+            err.message
+          )
+          return
+        }
+      }
 
       const from = msg.key.remoteJid
       const buttonReplyId = msg.message.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson
