@@ -404,46 +404,6 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
       from.split('@')[0] === botJid.split('@')[0]
 
 
-      // === QUIZ_INTERACTIF ===
-      if (!isGroup && ['A', 'B', 'C', 'D'].includes(upper)) {
-        try {
-          const quizFile = path.join(__dirname, 'quiz-actuel.json');
-
-          if (!fs.existsSync(quizFile)) {
-            await sock.sendMessage(from, {
-              text: '⏳ Aucun quiz actif pour le moment. Attends la prochaine question.'
-            });
-            return;
-          }
-
-          const quizActuel = JSON.parse(
-            fs.readFileSync(quizFile, 'utf8')
-          );
-
-          const resultat = enregistrerReponse(
-            phone || from,
-            quizActuel,
-            upper
-          );
-
-          await sock.sendMessage(from, {
-            text: resultat.message
-          });
-
-          console.log(
-            `🧠 Réponse quiz : ${upper} | question ${quizActuel.id} | valide=${resultat.valide}`
-          );
-
-        } catch (err) {
-          console.error('❌ Erreur réponse quiz:', err);
-          await sock.sendMessage(from, {
-            text: '⚠️ Impossible de traiter ta réponse pour le moment.'
-          });
-        }
-
-        return;
-      }
-
       if (!isGroup && upper === 'PRET') {
         try {
           await callQuizApi({ action: 'confirm_follow', phone })
