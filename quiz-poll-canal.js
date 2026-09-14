@@ -1,7 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { proto } = require('@whiskeysockets/baileys');
+let proto;
+
+async function getBaileysProto() {
+  if (!proto) {
+    const b = await import('@whiskeysockets/baileys');
+    proto = b.proto;
+  }
+  return proto;
+}
 
 const QUESTIONS_FILE = path.join(__dirname, 'questions.json');
 const REPONSES_FILE = path.join(__dirname, 'reponses-quiz.json');
@@ -70,6 +78,7 @@ function choisirQuestion() {
 }
 
 async function publierQuizCanal(sock) {
+  const p = await getBaileysProto();
   if (!sock) throw new Error('Socket WhatsApp absent');
 
   const q = choisirQuestion();
@@ -123,7 +132,7 @@ ${q.question}
   // Important : on ne passe PAS par sendMessage({ poll: ... }),
   // car Baileys 6.7.23 supprime pollType et correctAnswer
   // dans son générateur standard.
-  const pollCreationMessage = proto.Message.PollCreationMessage.fromObject({
+  const pollCreationMessage = p.Message.PollCreationMessage.fromObject({
     name: q.question,
     options,
     selectableOptionsCount: 1,
