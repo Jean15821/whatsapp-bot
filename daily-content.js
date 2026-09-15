@@ -1890,16 +1890,43 @@ const paroles = [
 🌼💐 🌸🌺🌷🌹💐 *Dieu est fidèle. Continue d’espérer.* 💐🌹🌷🌺🌸`
 ];
 
-let index = 0;
+const fs = require('fs');
+const path = require('path');
+
+const INDEX_FILE = path.join(__dirname, 'parole_index.json');
+
+function getSavedIndex() {
+  try {
+    const data = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8'));
+    return Number.isInteger(data.index) ? data.index : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveIndex(index) {
+  fs.writeFileSync(
+    INDEX_FILE,
+    JSON.stringify({ index }, null, 2)
+  );
+}
 
 function getDailyContent() {
+  let index = getSavedIndex();
+
+  // Cycle de 100 Paroles : 1 → 100 → 1
+  if (index < 0 || index >= 100 || index >= paroles.length) {
+    index = 0;
+  }
+
   const parole = paroles[index];
-  index = (index + 1) % paroles.length;
+
+  const nextIndex = (index + 1) % 100;
+  saveIndex(nextIndex);
 
   return `${parole}
 
 💐🌸🌺🌷🌹🌼🌻💮🌿
 *EDILPA — Église de Dieu Liberté par la Parole*`;
 }
-
 module.exports = { getDailyContent };
