@@ -334,21 +334,28 @@ async function startBot(attempt = 1) {
 
     sock.ev.on('creds.update', saveCreds)
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect } = update
-      if (connection === 'close') {
+      if (connection === "close") {
         if (currentSock === sock) currentSock = null
         const code = lastDisconnect?.error?.output?.statusCode
         const shouldReconnect = code !== DisconnectReason.loggedOut
         console.log(`Connexion fermée (code ${code}). Reconnexion: ${shouldReconnect}`)
         if (shouldReconnect) {
-          sleep(getBackoffDelay(attempt)).then(() => startBot(attempt + 1))
+          const delay = getBackoffDelay(attempt)
+          console.log(`⏳ Nouvelle tentative dans ${Math.round(delay / 1000)} secondes...`)
+          setTimeout(() => {
+            startBot(attempt + 1).catch(err => {
+              console.error("❌ Erreur redémarrage bot:", err.message)
+            })
+          }, delay)
         } else {
-          console.log('❌ Session déconnectée par WhatsApp. Supprime auth_info et relance pour repairer.')
+          console.log("❌ Session WhatsApp refusée (401). Render ne demandera AUCUN code de pairing.")
+          console.log("🔐 La session doit être recréée localement puis exportée vers AUTH_INFO_B64.")
         }
-      } else if (connection === 'open') {
+      } else if (connection === "open") {
+        currentSock = sock
         console.log('✅ Bot biblique connecté à WhatsApp — répond à tous (+ toi dans "Tú")')
-        currentSock = sock;
         if (process.env.TEST_POLL_ONCE === "1") {
           console.log("🧪 TEST UNIQUE : publication du sondage natif...");
           setTimeout(async () => {
@@ -525,7 +532,7 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
     console.log(`⚠️ Erreur de démarrage (tentative ${attempt}): ${err.message}`)
     console.log('Nouvelle tentative dans 5s...')
     await sleep(getBackoffDelay(attempt))
-    startBot(attempt + 1)
+    startBot(attempt + 1).catch(err => console.error("❌ Erreur redémarrage bot:", err.message))
   }
 }
 
