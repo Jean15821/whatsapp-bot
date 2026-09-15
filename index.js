@@ -453,12 +453,14 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
       if (text.includes('Vérifie toujours les versets')) return
       if (msg.key.fromMe && !isSelfChat) return
 
+  console.log("🧪 DEBUG TEXTE:", JSON.stringify(text), "UPPER:", JSON.stringify(upper))
       const isGroup = from.endsWith('@g.us')
       const phone = extractPhone(from)
 
       console.log(`📩 ${from}: ${text}`)
 
       const upper = text.toUpperCase()
+  console.log("🧪 DEBUG TEXTE:", JSON.stringify(text), "UPPER:", JSON.stringify(upper), "GROUP:", isGroup)
     const botJid = jidNormalizedUser(sock.user.id)
     const ADMIN_LID = "130472835305511@lid"
 
