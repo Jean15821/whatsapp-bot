@@ -97,6 +97,7 @@ const ADMIN_PHONE = "50940627737";
 let canalQuizCronRegistered = false;
 let currentSock = null;
 let cronRegistered = false;
+let renderSessionRestored = false;
 function registerCanalQuizCron() {
   if (canalQuizCronRegistered) return;
   canalQuizCronRegistered = true;
@@ -250,12 +251,19 @@ function isSocketReady(sock) {
 async function startBot(attempt = 1) {
   try {
     // 🔐 RESTAURATION DE LA SESSION WHATSAPP SUR RENDER
-    // La session est stockée dans la variable secrète AUTH_INFO_B64.
-    if (process.env.AUTH_INFO_B64 && !fs.existsSync('auth_info/creds.json')) {
+    // La session AUTH_INFO_B64 est restaurée une seule fois au démarrage.
+    const isRender = !!process.env.RENDER || !!process.env.RENDER_SERVICE_ID
+
+    if (isRender && process.env.AUTH_INFO_B64 && !renderSessionRestored) {
       console.log('🔐 Restauration de la session WhatsApp depuis Render...')
 
       const archive = Buffer.from(process.env.AUTH_INFO_B64, 'base64')
       const archivePath = path.join(__dirname, 'auth_info.tar.gz')
+
+      fs.rmSync(path.join(__dirname, 'auth_info'), {
+        recursive: true,
+        force: true
+      })
 
       fs.writeFileSync(archivePath, archive)
 
@@ -264,7 +272,9 @@ async function startBot(attempt = 1) {
 
       fs.unlinkSync(archivePath)
 
-      console.log('✅ Session WhatsApp restaurée.')
+      renderSessionRestored = true
+
+      console.log('✅ Session WhatsApp restaurée depuis AUTH_INFO_B64.')
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_info')
@@ -284,7 +294,6 @@ async function startBot(attempt = 1) {
     })
 
     // 🔐 PAIRING UNIQUEMENT EN LOCAL — JAMAIS SUR RENDER
-    const isRender = !!process.env.RENDER || !!process.env.RENDER_SERVICE_ID
 
     if (isRender) {
       console.log("☁️ Render détecté : aucun code de pairing ne sera demandé.")
