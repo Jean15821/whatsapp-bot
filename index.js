@@ -382,26 +382,6 @@ async function startBot(attempt = 1) {
         registerDailyCron()
         registerCanalQuizCron()
 
-        setTimeout(async () => {
-          if (!currentSock) {
-            console.log("⚠️ Quiz initial annulé : WhatsApp non disponible.")
-            return
-          }
-
-          try {
-            await publierQuizCanal(currentSock)
-            console.log("🚀 Quiz initial publié après connexion.")
-
-            try {
-              saveFacebookPost()
-              console.log("📘 Publication Facebook préparée.")
-            } catch (fbErr) {
-              console.error("❌ Erreur préparation Facebook :", fbErr.message)
-            }
-          } catch (err) {
-            console.error("❌ Échec du quiz initial :", err.message)
-          }
-        }, 10000)
       }
     })
 
