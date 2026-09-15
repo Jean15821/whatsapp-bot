@@ -367,18 +367,41 @@ async function startBot(attempt = 1) {
       } else if (connection === "open") {
         currentSock = sock
         console.log('✅ Bot biblique connecté à WhatsApp — répond à tous (+ toi dans "Tú")')
+
         if (process.env.TEST_POLL_ONCE === "1") {
-          console.log("🧪 TEST UNIQUE : publication du sondage natif...");
+          console.log("🧪 TEST UNIQUE : publication du sondage natif...")
           setTimeout(async () => {
             try {
-              console.log("✅ TEST QUIZ DIRECT RÉUSSI");
+              console.log("✅ TEST QUIZ DIRECT RÉUSSI")
             } catch (err) {
-              console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message);
+              console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message)
             }
-          }, 3000);
+          }, 3000)
         }
-        registerDailyCron();
-        registerCanalQuizCron();
+
+        registerDailyCron()
+        registerCanalQuizCron()
+
+        setTimeout(async () => {
+          if (!currentSock) {
+            console.log("⚠️ Quiz initial annulé : WhatsApp non disponible.")
+            return
+          }
+
+          try {
+            await publierQuizCanal(currentSock)
+            console.log("🚀 Quiz initial publié après connexion.")
+
+            try {
+              saveFacebookPost()
+              console.log("📘 Publication Facebook préparée.")
+            } catch (fbErr) {
+              console.error("❌ Erreur préparation Facebook :", fbErr.message)
+            }
+          } catch (err) {
+            console.error("❌ Échec du quiz initial :", err.message)
+          }
+        }, 10000)
       }
     })
 
@@ -514,15 +537,51 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
             const feedback = data.correct ? '✅ Bonne réponse ! +10 XP' : `❌ Mauvaise réponse\nBonne réponse : ${data.correct_letter}`
 
             if (data.type === 'finished') {
-              let niveau = data.niveau ?? "Débutant"
-              let xpTotal = data.xp_total ?? data.score
-              let extra = `\nNiveau : ${niveau}`
-              if (data.niveau_up) extra += ` 🎉 (niveau supérieur !)`
-              extra += `\nXP total : ${xpTotal}`
-              if (data.badge) extra += `\n\n🎁 Nouveau badge débloqué : ${data.badge.icone} *${data.badge.nom}*`
+              const score = Number(data.score) || 0
+              const total = Number(data.total) || 10
+              const bonnes = Math.round(score / 10)
+              const pourcentage = Math.round((bonnes / total) * 100)
+              const xpGagne = score
+              const xpTotal = data.xp_total ?? score
+              const niveau = data.niveau ?? "Débutant"
+
+              let progression = ''
+              if (pourcentage === 100) {
+                progression = '🔥 *Parfait !* Tu as répondu correctement à toutes les questions !'
+              } else if (pourcentage >= 80) {
+                progression = '🌟 *Excellent résultat !* Continue comme ça !'
+              } else if (pourcentage >= 60) {
+                progression = '👏 *Très bien !* Encore un peu d’effort pour atteindre le sommet.'
+              } else {
+                progression = '💪 *Courage !* Chaque partie te permet de progresser dans la Parole de Dieu.'
+              }
+
+              let recompenses = ''
+              if (data.niveau_up) {
+                recompenses += `\n🎉 *NIVEAU SUPÉRIEUR !*`
+              }
+
+              if (data.badge) {
+                recompenses += `\n🎁 *Nouveau badge :* ${data.badge.icone} ${data.badge.nom}`
+              }
 
               await sock.sendMessage(from, {
-                text: `${feedback}\n\n🏆 *QUIZ TERMINÉ*\n\nScore : ${data.score / 10}/${data.total}\nXP : +${data.score}${extra}\n\n_Écris JOUER pour rejouer_\n\n📢 Suis le canal *Parole & Défi* pour ne rater aucune question du jour :\n${CHANNEL_LINK}`
+                text:
+                  `${feedback}\n\n` +
+                  `🏆 *QUIZ BIBLIQUE TERMINÉ*\n\n` +
+                  `📊 *Résultat*\n` +
+                  `✅ Bonnes réponses : *${bonnes}/${total}*\n` +
+                  `🎯 Réussite : *${pourcentage}%*\n\n` +
+                  `⭐ XP gagné : *+${xpGagne}*\n` +
+                  `💎 XP total : *${xpTotal}*\n` +
+                  `📈 Niveau : *${niveau}*` +
+                  `${recompenses}\n\n` +
+                  `${progression}\n\n` +
+                  `📖 Continue à apprendre et à grandir dans la Parole de Dieu.\n\n` +
+                  `🎮 _Écris JOUER pour commencer une nouvelle partie._\n\n` +
+                  `📢 *Parole & Défi*\n` +
+                  `Suis notre canal pour ne manquer aucune question du jour :\n` +
+                  `${CHANNEL_LINK}`
               })
             } else {
               await sock.sendMessage(from, { text: `${feedback}\n\n${formatQuestion(data)}` })
