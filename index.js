@@ -502,10 +502,16 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
             const feedback = data.correct ? '✅ Bonne réponse ! +10 XP' : `❌ Mauvaise réponse\nBonne réponse : ${data.correct_letter}`
 
             if (data.type === 'finished') {
-              let extra = `\nNiveau : ${data.niveau}`
-              if (data.niveau_up) extra += ` 🎉 (niveau supérieur !)`
-              extra += `\nXP total : ${data.xp_total}`
-              if (data.badge) extra += `\n\n🎁 Nouveau badge débloqué : ${data.badge.icone} *${data.badge.nom}*`
+              let niveau = data.niveau || "Débutant"
+              let xpTotal = data.xp_total ?? data.score
+              let extra = `
+Niveau : ${niveau}`
+              if (data.niveau_up) extra += `  🎉 (niveau supérieur !)`
+              extra += `
+XP total : ${xpTotal}`
+              if (data.badge) extra += `
+
+🎁 Nouveau badge débloqué : ${data.badge.icone} *${data.badge.nom}*`
 
               await sock.sendMessage(from, {
                 text: `${feedback}\n\n🏆 *QUIZ TERMINÉ*\n\nScore : ${data.score / 10}/${data.total}\nXP : +${data.score}${extra}\n\n_Écris JOUER pour rejouer_\n\n📢 Suis le canal *Parole & Défi* pour ne rater aucune question du jour :\n${CHANNEL_LINK}`
