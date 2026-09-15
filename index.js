@@ -67,7 +67,9 @@ async function callQuizApi(params) {
 }
 
 function formatQuestion(q) {
-  return `📖 *Question ${q.number}/${q.total}*\n\n${q.question}\n\nA. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n_Réponds avec A, B, C ou D_`
+  const number = q.number ?? q.numer ?? q.numero ?? q["numéro"] ?? 1
+  const total = q.total ?? 10
+  return `📖 *Question ${number}/${total}*\n\n${q.question ?? ""}\n\nA. ${q.a ?? ""}\nB. ${q.b ?? ""}\nC. ${q.c ?? ""}\nD. ${q.d ?? ""}\n\n_Réponds avec A, B, C ou D_`
 }
 
 async function sendSubscribeGate(sock, from) {
