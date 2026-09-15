@@ -1,3 +1,4 @@
+const { getNewBadge } = require("./badges");
 require("dotenv").config()
 let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fetchLatestBaileysVersion;
 const axios = require('axios')
@@ -131,14 +132,11 @@ function registerCanalQuizCron() {
     }
   };
 
-  // Premier quiz immédiatement après la connexion.
-  setTimeout(publierQuiz, 10000);
-
   // Ensuite, un nouveau quiz toutes les heures.
   cron.schedule("0 * * * *", publierQuiz);
 
   console.log(
-    "🧠 Quiz NATIF WhatsApp activé : immédiatement puis toutes les heures"
+    "🧠 Quiz NATIF WhatsApp activé : toutes les heures"
   );
 }
 
@@ -146,8 +144,11 @@ function registerDailyCron() {
   if (cronRegistered) return;
   cronRegistered = true;
 
-  const DAILY_FILE = path.join(__dirname, 'parole_last_sent.json');
-  let dailyPublishLock = false;
+  const AM_FILE = path.join(__dirname, 'parole_am_last_sent.json');
+  const PM_FILE = path.join(__dirname, 'parole_pm_last_sent.json');
+
+  let amLock = false;
+  let pmLock = false;
 
   function todayKey() {
     return new Date().toLocaleDateString('en-CA', {
@@ -155,75 +156,96 @@ function registerDailyCron() {
     });
   }
 
-  async function publishMorningWord() {
-    if (!currentSock) {
-      console.log('⏳ WhatsApp non connecté : Parole du jour attendra la prochaine vérification.');
-      return;
-    }
-
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Port-au-Prince',
-      hour: 'numeric',
-      hour12: false
-    }).formatToParts(now);
-
-    const hour = Number(parts.find(p => p.type === 'hour')?.value || 0);
-
-    // Publication uniquement le matin : 06h00 à 11h59
-    if (hour < 6 || hour >= 12) return;
-
-    let lastSent = null;
+  function alreadySent(file) {
     try {
-      lastSent = JSON.parse(fs.readFileSync(DAILY_FILE, 'utf8')).date;
-    } catch {}
-
-    // Une seule Parole du jour par date.
-    // Verrou mémoire : empêche deux appels simultanés.
-    if (dailyPublishLock) {
-      console.log('⏳ Publication Parole du jour déjà en cours.');
-      return;
-    }
-
-    if (lastSent === todayKey()) {
-      console.log('⏭️ Parole du jour déjà publiée aujourd’hui.');
-      return;
-    }
-
-    dailyPublishLock = true;
-
-    try {
-      await currentSock.sendMessage(CANALJID, {
-        text: getDailyContent()
-      });
-
-      fs.writeFileSync(
-        DAILY_FILE,
-        JSON.stringify({
-          date: todayKey(),
-          sentAt: new Date().toISOString()
-        }, null, 2)
-      );
-
-      console.log('✅ 🌸 PAROLE DU JOUR publiée ce matin');
-    } catch (err) {
-      console.error('❌ Échec publication PAROLE DU JOUR:', err.message);
-    } finally {
-      dailyPublishLock = false;
+      return JSON.parse(fs.readFileSync(file, 'utf8')).date === todayKey();
+    } catch {
+      return false;
     }
   }
 
-  // Vérification toutes les 30 minutes pendant la matinée.
+  function markSent(file) {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        date: todayKey(),
+        sentAt: new Date().toISOString()
+      }, null, 2)
+    );
+  }
+
+  async function publishMorningWord() {
+    if (!currentSock || amLock) return;
+
+    if (alreadySent(AM_FILE)) {
+      console.log('⏭️ Parole AM déjà publiée aujourd’hui.');
+      return;
+    }
+
+    amLock = true;
+
+    try {
+      const text = getDailyContent() + '\n\n🌅 Bonne journée !';
+
+      await currentSock.sendMessage(CANALJID, {
+        text
+      });
+
+      markSent(AM_FILE);
+
+      console.log('✅ 🌅 PAROLE DU JOUR + BONNE JOURNÉE publiée.');
+    } catch (err) {
+      console.error('❌ Échec publication AM:', err.message);
+    } finally {
+      amLock = false;
+    }
+  }
+
+  async function publishEveningWord() {
+    if (!currentSock || pmLock) return;
+
+    if (alreadySent(PM_FILE)) {
+      console.log('⏭️ Parole PM déjà publiée aujourd’hui.');
+      return;
+    }
+
+    pmLock = true;
+
+    try {
+      const text = getDailyContent() + '\n\n🌙 Bonne soirée !';
+
+      await currentSock.sendMessage(CANALJID, {
+        text
+      });
+
+      markSent(PM_FILE);
+
+      console.log('✅ 🌙 PAROLE DU JOUR + BONNE SOIRÉE publiée.');
+    } catch (err) {
+      console.error('❌ Échec publication PM:', err.message);
+    } finally {
+      pmLock = false;
+    }
+  }
+
+  // 🌅 AM : toutes les 30 minutes entre 06h00 et 11h59.
   cron.schedule('*/30 6-11 * * *', publishMorningWord, {
     timezone: 'America/Port-au-Prince'
   });
 
-  // Vérification immédiate après connexion.
-  setTimeout(publishMorningWord, 15000);
+  // 🌙 PM : toutes les 30 minutes entre 18h00 et 21h59.
+  cron.schedule('*/30 18-21 * * *', publishEveningWord, {
+    timezone: 'America/Port-au-Prince'
+  });
 
-  console.log('🌸 Parole du jour activée : publication entre 06h00 et 11h59.');
+  console.log('🌅 Parole du jour AM activée.');
+  console.log('🌙 Parole du jour PM activée.');
 }
 
+
+function isSocketReady(sock) {
+  return !!(sock && sock.user && currentSock === sock)
+}
 
 async function startBot(attempt = 1) {
   try {
@@ -261,51 +283,61 @@ async function startBot(attempt = 1) {
       retryRequestDelayMs: 3000,
     })
 
-    // 🔐 PAIRING LOCAL UNIQUEMENT
-    // Sur Render, aucune nouvelle demande de pairing automatique.
-    if (!state.creds.registered && !pairingCodeRequested && !process.env.AUTH_INFO_B64) {
-  console.log('🔐 Aucune session WhatsApp enregistrée.')
-  console.log('📱 Préparation du code de pairing...')
+    // 🔐 PAIRING UNIQUEMENT EN LOCAL — JAMAIS SUR RENDER
+    const isRender = !!process.env.RENDER || !!process.env.RENDER_SERVICE_ID
 
-  try {
-    if (!savedPhoneNumber) {
-      savedPhoneNumber = "50940627737"
+    if (isRender) {
+      console.log("☁️ Render détecté : aucun code de pairing ne sera demandé.")
+    } else if (!state.creds.registered && !pairingCodeRequested) {
+      console.log("🔐 Aucune session WhatsApp enregistrée.")
+      console.log("📱 Préparation du code de pairing...")
+
+      try {
+        if (!savedPhoneNumber) {
+          savedPhoneNumber = "50940627737"
+        }
+
+        await sleep(3000)
+
+        console.log(
+          "📱 Demande du code de pairing pour :",
+          savedPhoneNumber
+        )
+
+        const code = await sock.requestPairingCode(
+          savedPhoneNumber.trim()
+        )
+
+        pairingCodeRequested = true
+
+        console.log("========================================")
+        console.log("📱 CODE DE PAIRING WHATSAPP :", code)
+        console.log("========================================")
+        console.log("👉 WhatsApp > Appareils connectés")
+        console.log("👉 Connecter un appareil")
+        console.log("👉 Connecter avec un numéro de téléphone")
+        console.log("👉 Entrer le code ci-dessus")
+        console.log("========================================")
+
+      } catch (err) {
+        console.error(
+          "❌ Échec de la demande de code :",
+          err.message
+        )
+        pairingCodeRequested = false
+      }
+
+    } else if (state.creds.registered) {
+      console.log("🔐 Session WhatsApp déjà enregistrée.")
+      console.log("✅ Aucun code de pairing nécessaire.")
     }
 
-    await sleep(3000)
-
-    console.log('📱 Demande du code de pairing pour :', savedPhoneNumber)
-
-    const code = await sock.requestPairingCode(
-      savedPhoneNumber.trim()
-    )
-
-    pairingCodeRequested = true
-
-    console.log('========================================')
-    console.log('📱 CODE DE PAIRING WHATSAPP :', code)
-    console.log('========================================')
-    console.log('👉 WhatsApp > Appareils connectés')
-    console.log('👉 Connecter un appareil')
-    console.log('👉 Connecter avec un numéro de téléphone')
-    console.log('👉 Entrer le code ci-dessus')
-    console.log('========================================')
-
-  } catch (err) {
-    console.error('❌ Échec de la demande de code :', err.message)
-    pairingCodeRequested = false
-    console.log('🔄 Le prochain démarrage pourra redemander le pairing.')
-  }
-} else if (state.creds.registered) {
-  console.log('🔐 Session WhatsApp déjà enregistrée.')
-  console.log('✅ Aucun code de pairing nécessaire.')
-}
-
-sock.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', saveCreds)
 
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect } = update
       if (connection === 'close') {
+        if (currentSock === sock) currentSock = null
         const code = lastDisconnect?.error?.output?.statusCode
         const shouldReconnect = code !== DisconnectReason.loggedOut
         console.log(`Connexion fermée (code ${code}). Reconnexion: ${shouldReconnect}`)
@@ -321,7 +353,6 @@ sock.ev.on('creds.update', saveCreds)
           console.log("🧪 TEST UNIQUE : publication du sondage natif...");
           setTimeout(async () => {
             try {
-              await publierQuizCanal(currentSock);
               console.log("✅ TEST QUIZ DIRECT RÉUSSI");
             } catch (err) {
               console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message);
@@ -433,6 +464,10 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
       }
 
       if (!isGroup && ['JOUER', 'JWE', 'QUIZ', 'JEU'].includes(upper)) {
+        if (!isSocketReady(sock)) {
+          console.log("⚠️ JOUER reçu mais WhatsApp est déconnecté.")
+          return
+        }
         try {
           const data = await callQuizApi({ action: 'start', phone })
           if (data.type === 'subscribe_required') {
