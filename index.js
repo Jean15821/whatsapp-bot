@@ -99,6 +99,9 @@ const ADMIN_PHONE = "50940627737";
 let canalQuizCronRegistered = false;
 let currentSock = null;
 let cronRegistered = false;
+
+// Empêche deux commandes JOUER simultanées pour le même numéro.
+const quizStartLocks = new Set();
 let renderSessionRestored = false;
 function registerCanalQuizCron() {
   if (canalQuizCronRegistered) return;
@@ -490,19 +493,35 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
           console.log("⚠️ JOUER reçu mais WhatsApp est déconnecté.")
           return
         }
+
+        if (quizStartLocks.has(phone)) {
+          console.log(`⏳ JOUER ignoré : démarrage déjà en cours pour ${phone}`)
+          return
+        }
+
+        quizStartLocks.add(phone)
+
         try {
           const data = await callQuizApi({ action: 'start', phone })
+
           if (data.type === 'subscribe_required') {
             await sendSubscribeGate(sock, from)
           } else if (data.error) {
             await sock.sendMessage(from, { text: `⚠️ ${data.error}` })
           } else {
-            await sock.sendMessage(from, { text: `🏆 *QUIZ BIBLIQUE EDILPA*\n\n${formatQuestion(data)}` })
+            await sock.sendMessage(from, {
+              text: `🏆 *QUIZ BIBLIQUE EDILPA*\n\n${formatQuestion(data)}`
+            })
           }
         } catch (err) {
           console.error('Erreur quiz start:', err.message)
-          await sock.sendMessage(from, { text: '⚠️ Erreur de connexion au quiz, réessaie.' })
+          await sock.sendMessage(from, {
+            text: '⚠️ Erreur de connexion au quiz, réessaie.'
+          })
+        } finally {
+          quizStartLocks.delete(phone)
         }
+
         return
       }
 
