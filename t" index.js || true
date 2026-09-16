@@ -1,0 +1,117 @@
+[1mdiff --git a/index.js b/index.js[m
+[1mindex 2e6526e..2ffaaae 100644[m
+[1m--- a/index.js[m
+[1m+++ b/index.js[m
+[36m@@ -87,7 +87,8 @@[m [mconst CANALJID = "120363411968127620@newsletter";[m
+ const {[m
+   publierQuizCanal,[m
+   chargerQuizActuel,[m
+[31m-  construireRevelation[m
+[32m+[m[32m  construireRevelation,[m
+[32m+[m[32m  traiterVoteSondage[m
+ } = require("./quiz-poll-canal");[m
+ const { enregistrerReponse } = require('./quiz-reponses');[m
+ const ADMIN_PHONE = "50940627737";[m
+[36m@@ -100,7 +101,7 @@[m [mfunction registerCanalQuizCron() {[m
+ [m
+   const publierQuiz = async () => {[m
+     if (!currentSock) {[m
+[31m-      console.error("❌ Bot non connecté, poll annulé");[m
+[32m+[m[32m      console.error("❌ Bot non connecté, quiz annulé");[m
+       return;[m
+     }[m
+ [m
+[36m@@ -108,11 +109,22 @@[m [mfunction registerCanalQuizCron() {[m
+       await publierQuizCanal(currentSock);[m
+ [m
+       console.log([m
+[31m-        "✅ VRAI POLL WHATSAPP publié dans le canal"[m
+[32m+[m[32m        "✅ QUIZ DIRECT WHATSAPP publié dans le canal"[m
+       );[m
+[32m+[m
+[32m+[m[32m      // Préparer également la publication Facebook.[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        saveFacebookPost();[m
+[32m+[m[32m        console.log("📘 Publication Facebook préparée.");[m
+[32m+[m[32m      } catch (fbErr) {[m
+[32m+[m[32m        console.error([m
+[32m+[m[32m          "❌ Erreur préparation Facebook :",[m
+[32m+[m[32m          fbErr.message[m
+[32m+[m[32m        );[m
+[32m+[m[32m      }[m
+     } catch (err) {[m
+       console.error([m
+[31m-        "❌ Erreur publication poll :",[m
+[32m+[m[32m        "❌ Erreur publication quiz :",[m
+         err.message[m
+       );[m
+     }[m
+[36m@@ -291,9 +303,9 @@[m [msock.ev.on('creds.update', saveCreds)[m
+           setTimeout(async () => {[m
+             try {[m
+               await publierQuizCanal(currentSock);[m
+[31m-              console.log("✅ TEST POLL NATIF RÉUSSI");[m
+[32m+[m[32m              console.log("✅ TEST QUIZ DIRECT RÉUSSI");[m
+             } catch (err) {[m
+[31m-              console.error("❌ TEST POLL NATIF ÉCHEC :", err.message);[m
+[32m+[m[32m              console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message);[m
+             }[m
+           }, 3000);[m
+         }[m
+[36m@@ -306,6 +318,56 @@[m [msock.ev.on('creds.update', saveCreds)[m
+       const msg = messages[0][m
+       if (!msg.message) return[m
+ [m
+[32m+[m[32m      // === VOTE NATIF DU QUIZ DANS LE CANAL ===[m
+[32m+[m[32m      if (msg.message.pollUpdateMessage) {[m
+[32m+[m[32m        try {[m
+[32m+[m[32m          const resultat = await traiterVoteSondage(msg)[m
+[32m+[m
+[32m+[m[32m          if (resultat?.valide) {[m
+[32m+[m[32m            const poll = resultat.poll[m
+[32m+[m[32m            const choix = resultat.lettre[m
+[32m+[m
+[32m+[m[32m            console.log([m
+[32m+[m[32m              `🗳️ VOTE CANAL : ${resultat.voterJid} | ` +[m
+[32m+[m[32m              `question ${poll.numero} | choix ${choix} | ` +[m
+[32m+[m[32m              `correct=${resultat.bonne}`[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m            const message = resultat.bonne[m
+[32m+[m[32m              ? `✅ *BONNE RÉPONSE !*[m
+[32m+[m
+[32m+[m[32m🎉 Bravo ![m
+[32m+[m[32m🧠 Réponse : *${choix}. ${poll.options[choix]}*[m
+[32m+[m
+[32m+[m[32m📖 *Explication :*[m
+[32m+[m[32m${poll.explication || 'Continue à étudier la Parole de Dieu.'}[m
+[32m+[m
+[32m+[m[32m🏆 *Parole & Défi | EDILPA*`[m
+[32m+[m[32m              : `❌ *MAUVAISE RÉPONSE*[m
+[32m+[m
+[32m+[m[32m🧠 Ta réponse : *${choix}. ${poll.options[choix]}*[m
+[32m+[m[32m✅ La bonne réponse était : *${poll.bonne}. ${poll.options[poll.bonne]}*[m
+[32m+[m
+[32m+[m[32m📖 *Explication :*[m
+[32m+[m[32m${poll.explication || 'Continue à étudier la Parole de Dieu.'}[m
+[32m+[m
+[32m+[m[32m🏆 *Parole & Défi | EDILPA*`[m
+[32m+[m
+[32m+[m[32m            await sock.sendMessage(resultat.voterJid, {[m
+[32m+[m[32m              text: message[m
+[32m+[m[32m            })[m
+[32m+[m[32m          }[m
+[32m+[m
+[32m+[m[32m          return[m
+[32m+[m[32m        } catch (err) {[m
+[32m+[m[32m          console.error([m
+[32m+[m[32m            '❌ Erreur traitement vote natif :',[m
+[32m+[m[32m            err.message[m
+[32m+[m[32m          )[m
+[32m+[m[32m          return[m
+[32m+[m[32m        }[m
+[32m+[m[32m      }[m
+[32m+[m
+       const from = msg.key.remoteJid[m
+       const buttonReplyId = msg.message.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson[m
+         ? (() => { try { return JSON.parse(msg.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson).id } catch { return null } })()[m

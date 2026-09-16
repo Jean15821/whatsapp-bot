@@ -389,7 +389,7 @@ async function startBot(attempt = 1) {
     })
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
-      const msg = messages[0]
+      const msg = messages[messages.length - 1]
       if (!msg.message) return
 
       // === VOTE NATIF DU QUIZ DANS LE CANAL ===
@@ -577,10 +577,17 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
                   `${recompenses}\n\n` +
                   `${progression}\n\n` +
                   `📖 Continue à apprendre et à grandir dans la Parole de Dieu.\n\n` +
-                  `🎮 _Écris JOUER pour commencer une nouvelle partie._\n\n` +
-                  `📢 *Parole & Défi*\n` +
-                  `Suis notre canal pour ne manquer aucune question du jour :\n` +
-                  `${CHANNEL_LINK}`
+                  `🎮 _Écris JOUER pour commencer une nouvelle partie._`,
+                footer: '📢 Parole & Défi',
+                templateButtons: [
+                  {
+                    index: 1,
+                    urlButton: {
+                      displayText: '📢 SUIVRE PAROLE & DÉFI',
+                      url: CHANNEL_LINK
+                    }
+                  }
+                ]
               })
             } else {
               await sock.sendMessage(from, { text: `${feedback}\n\n${formatQuestion(data)}` })

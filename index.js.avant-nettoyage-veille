@@ -1,4 +1,3 @@
-const { getNewBadge } = require("./badges");
 require("dotenv").config()
 let makeWASocket, useMultiFileAuthState, DisconnectReason, jidNormalizedUser, fetchLatestBaileysVersion;
 const axios = require('axios')
@@ -67,9 +66,7 @@ async function callQuizApi(params) {
 }
 
 function formatQuestion(q) {
-  const number = q.number ?? q.numer ?? q.numero ?? q["numéro"] ?? 1
-  const total = q.total ?? 10
-  return `📖 *Question ${number}/${total}*\n\n${q.question ?? ""}\n\nA. ${q.a ?? ""}\nB. ${q.b ?? ""}\nC. ${q.c ?? ""}\nD. ${q.d ?? ""}\n\n_Réponds avec A, B, C ou D_`
+  return `📖 *Question ${q.number}/${q.total}*\n\n${q.question}\n\nA. ${q.a}\nB. ${q.b}\nC. ${q.c}\nD. ${q.d}\n\n_Réponds avec A, B, C ou D_`
 }
 
 async function sendSubscribeGate(sock, from) {
@@ -99,10 +96,6 @@ const ADMIN_PHONE = "50940627737";
 let canalQuizCronRegistered = false;
 let currentSock = null;
 let cronRegistered = false;
-
-// Empêche deux commandes JOUER simultanées pour le même numéro.
-const quizStartLocks = new Set();
-let renderSessionRestored = false;
 function registerCanalQuizCron() {
   if (canalQuizCronRegistered) return;
   canalQuizCronRegistered = true;
@@ -138,11 +131,14 @@ function registerCanalQuizCron() {
     }
   };
 
+  // Premier quiz immédiatement après la connexion.
+  setTimeout(publierQuiz, 10000);
+
   // Ensuite, un nouveau quiz toutes les heures.
   cron.schedule("0 * * * *", publierQuiz);
 
   console.log(
-    "🧠 Quiz NATIF WhatsApp activé : toutes les heures"
+    "🧠 Quiz NATIF WhatsApp activé : immédiatement puis toutes les heures"
   );
 }
 
@@ -150,11 +146,7 @@ function registerDailyCron() {
   if (cronRegistered) return;
   cronRegistered = true;
 
-  const AM_FILE = path.join(__dirname, 'parole_am_last_sent.json');
-  const PM_FILE = path.join(__dirname, 'parole_pm_last_sent.json');
-
-  let amLock = false;
-  let pmLock = false;
+  const DAILY_FILE = path.join(__dirname, 'parole_last_sent.json');
 
   function todayKey() {
     return new Date().toLocaleDateString('en-CA', {
@@ -162,113 +154,72 @@ function registerDailyCron() {
     });
   }
 
-  function alreadySent(file) {
-    try {
-      return JSON.parse(fs.readFileSync(file, 'utf8')).date === todayKey();
-    } catch {
-      return false;
-    }
-  }
-
-  function markSent(file) {
-    fs.writeFileSync(
-      file,
-      JSON.stringify({
-        date: todayKey(),
-        sentAt: new Date().toISOString()
-      }, null, 2)
-    );
-  }
-
   async function publishMorningWord() {
-    if (!currentSock || amLock) return;
-
-    if (alreadySent(AM_FILE)) {
-      console.log('⏭️ Parole AM déjà publiée aujourd’hui.');
+    if (!currentSock) {
+      console.log('⏳ WhatsApp non connecté : Parole du jour attendra la prochaine vérification.');
       return;
     }
 
-    amLock = true;
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Port-au-Prince',
+      hour: 'numeric',
+      hour12: false
+    }).formatToParts(now);
+
+    const hour = Number(parts.find(p => p.type === 'hour')?.value || 0);
+
+    // Publication uniquement le matin : 06h00 à 11h59
+    if (hour < 6 || hour >= 12) return;
+
+    let lastSent = null;
+    try {
+      lastSent = JSON.parse(fs.readFileSync(DAILY_FILE, 'utf8')).date;
+    } catch {}
+
+    // Une seule Parole du jour par date
+    if (lastSent === todayKey()) return;
 
     try {
-      const text = getDailyContent() + '\n\n🌅 Bonne journée !';
-
       await currentSock.sendMessage(CANALJID, {
-        text
+        text: getDailyContent()
       });
 
-      markSent(AM_FILE);
+      fs.writeFileSync(
+        DAILY_FILE,
+        JSON.stringify({
+          date: todayKey(),
+          sentAt: new Date().toISOString()
+        }, null, 2)
+      );
 
-      console.log('✅ 🌅 PAROLE DU JOUR + BONNE JOURNÉE publiée.');
+      console.log('✅ 🌸 PAROLE DU JOUR publiée ce matin');
     } catch (err) {
-      console.error('❌ Échec publication AM:', err.message);
-    } finally {
-      amLock = false;
+      console.error('❌ Échec publication PAROLE DU JOUR:', err.message);
     }
   }
 
-  async function publishEveningWord() {
-    if (!currentSock || pmLock) return;
-
-    if (alreadySent(PM_FILE)) {
-      console.log('⏭️ Parole PM déjà publiée aujourd’hui.');
-      return;
-    }
-
-    pmLock = true;
-
-    try {
-      const text = getDailyContent() + '\n\n🌙 Bonne soirée !';
-
-      await currentSock.sendMessage(CANALJID, {
-        text
-      });
-
-      markSent(PM_FILE);
-
-      console.log('✅ 🌙 PAROLE DU JOUR + BONNE SOIRÉE publiée.');
-    } catch (err) {
-      console.error('❌ Échec publication PM:', err.message);
-    } finally {
-      pmLock = false;
-    }
-  }
-
-  // 🌅 AM : toutes les 30 minutes entre 06h00 et 11h59.
+  // Vérification toutes les 30 minutes pendant la matinée.
   cron.schedule('*/30 6-11 * * *', publishMorningWord, {
     timezone: 'America/Port-au-Prince'
   });
 
-  // 🌙 PM : toutes les 30 minutes entre 18h00 et 21h59.
-  cron.schedule('*/30 18-21 * * *', publishEveningWord, {
-    timezone: 'America/Port-au-Prince'
-  });
+  // Vérification immédiate après connexion.
+  setTimeout(publishMorningWord, 15000);
 
-  console.log('🌅 Parole du jour AM activée.');
-  console.log('🌙 Parole du jour PM activée.');
+  console.log('🌸 Parole du jour activée : publication entre 06h00 et 11h59.');
 }
 
-
-function isSocketReady(sock) {
-  return !!(sock && sock.user && currentSock === sock)
-}
 
 async function startBot(attempt = 1) {
   try {
     // 🔐 RESTAURATION DE LA SESSION WHATSAPP SUR RENDER
-    // La session AUTH_INFO_B64 est restaurée une seule fois au démarrage.
-    const isRender = !!process.env.RENDER || !!process.env.RENDER_SERVICE_ID
-
-    if (isRender && process.env.AUTH_INFO_B64 && !renderSessionRestored) {
+    // La session est stockée dans la variable secrète AUTH_INFO_B64.
+    if (process.env.AUTH_INFO_B64 && !fs.existsSync('auth_info/creds.json')) {
       console.log('🔐 Restauration de la session WhatsApp depuis Render...')
 
       const archive = Buffer.from(process.env.AUTH_INFO_B64, 'base64')
       const archivePath = path.join(__dirname, 'auth_info.tar.gz')
-
-      fs.rmSync(path.join(__dirname, 'auth_info'), {
-        recursive: true,
-        force: true
-      })
 
       fs.writeFileSync(archivePath, archive)
 
@@ -277,18 +228,12 @@ async function startBot(attempt = 1) {
 
       fs.unlinkSync(archivePath)
 
-      renderSessionRestored = true
-
-      console.log('✅ Session WhatsApp restaurée depuis AUTH_INFO_B64.')
+      console.log('✅ Session WhatsApp restaurée.')
     }
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_info')
-
-    const { version, isLatest } = await fetchLatestBaileysVersion()
-    console.log('🌐 Version WhatsApp détectée :', version, '| Dernière :', isLatest)
-
     const sock = makeWASocket({
-         version,
+         version: [2, 3000, 1043857760],
          browser: ["Ubuntu", "Chrome", "22.04.4"],
       auth: state,
       printQRInTerminal: false,
@@ -298,93 +243,75 @@ async function startBot(attempt = 1) {
       retryRequestDelayMs: 3000,
     })
 
-    // 🔐 PAIRING UNIQUEMENT EN LOCAL — JAMAIS SUR RENDER
+    // 🔐 PAIRING LOCAL UNIQUEMENT
+    // Sur Render, aucune nouvelle demande de pairing automatique.
+    if (!state.creds.registered && !pairingCodeRequested && !process.env.AUTH_INFO_B64) {
+  console.log('🔐 Aucune session WhatsApp enregistrée.')
+  console.log('📱 Préparation du code de pairing...')
 
-    if (isRender) {
-      console.log("☁️ Render détecté : aucun code de pairing ne sera demandé.")
-    } else if (!state.creds.registered && !pairingCodeRequested) {
-      console.log("🔐 Aucune session WhatsApp enregistrée.")
-      console.log("📱 Préparation du code de pairing...")
-
-      try {
-        if (!savedPhoneNumber) {
-          savedPhoneNumber = "50940627737"
-        }
-
-        await sleep(3000)
-
-        console.log(
-          "📱 Demande du code de pairing pour :",
-          savedPhoneNumber
-        )
-
-        const code = await sock.requestPairingCode(
-          savedPhoneNumber.trim()
-        )
-
-        pairingCodeRequested = true
-
-        console.log("========================================")
-        console.log("📱 CODE DE PAIRING WHATSAPP :", code)
-        console.log("========================================")
-        console.log("👉 WhatsApp > Appareils connectés")
-        console.log("👉 Connecter un appareil")
-        console.log("👉 Connecter avec un numéro de téléphone")
-        console.log("👉 Entrer le code ci-dessus")
-        console.log("========================================")
-
-      } catch (err) {
-        console.error(
-          "❌ Échec de la demande de code :",
-          err.message
-        )
-        pairingCodeRequested = false
-      }
-
-    } else if (state.creds.registered) {
-      console.log("🔐 Session WhatsApp déjà enregistrée.")
-      console.log("✅ Aucun code de pairing nécessaire.")
+  try {
+    if (!savedPhoneNumber) {
+      savedPhoneNumber = "50940627737"
     }
 
-    sock.ev.on('creds.update', saveCreds)
+    await sleep(3000)
 
-    sock.ev.on("connection.update", (update) => {
+    console.log('📱 Demande du code de pairing pour :', savedPhoneNumber)
+
+    const code = await sock.requestPairingCode(
+      savedPhoneNumber.trim()
+    )
+
+    pairingCodeRequested = true
+
+    console.log('========================================')
+    console.log('📱 CODE DE PAIRING WHATSAPP :', code)
+    console.log('========================================')
+    console.log('👉 WhatsApp > Appareils connectés')
+    console.log('👉 Connecter un appareil')
+    console.log('👉 Connecter avec un numéro de téléphone')
+    console.log('👉 Entrer le code ci-dessus')
+    console.log('========================================')
+
+  } catch (err) {
+    console.error('❌ Échec de la demande de code :', err.message)
+    pairingCodeRequested = false
+    console.log('🔄 Le prochain démarrage pourra redemander le pairing.')
+  }
+} else if (state.creds.registered) {
+  console.log('🔐 Session WhatsApp déjà enregistrée.')
+  console.log('✅ Aucun code de pairing nécessaire.')
+}
+
+sock.ev.on('creds.update', saveCreds)
+
+    sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect } = update
-      if (connection === "close") {
-        if (currentSock === sock) currentSock = null
+      if (connection === 'close') {
         const code = lastDisconnect?.error?.output?.statusCode
         const shouldReconnect = code !== DisconnectReason.loggedOut
         console.log(`Connexion fermée (code ${code}). Reconnexion: ${shouldReconnect}`)
         if (shouldReconnect) {
-          const delay = getBackoffDelay(attempt)
-          console.log(`⏳ Nouvelle tentative dans ${Math.round(delay / 1000)} secondes...`)
-          setTimeout(() => {
-            startBot(attempt + 1).catch(err => {
-              console.error("❌ Erreur redémarrage bot:", err.message)
-            })
-          }, delay)
+          sleep(getBackoffDelay(attempt)).then(() => startBot(attempt + 1))
         } else {
-          console.log("❌ Session WhatsApp refusée (401). Render ne demandera AUCUN code de pairing.")
-          console.log("🔐 La session doit être recréée localement puis exportée vers AUTH_INFO_B64.")
+          console.log('❌ Session déconnectée par WhatsApp. Supprime auth_info et relance pour repairer.')
         }
-      } else if (connection === "open") {
-        currentSock = sock
+      } else if (connection === 'open') {
         console.log('✅ Bot biblique connecté à WhatsApp — répond à tous (+ toi dans "Tú")')
-
+        currentSock = sock;
         if (process.env.TEST_POLL_ONCE === "1") {
-          console.log("🧪 TEST UNIQUE : publication du sondage natif...")
+          console.log("🧪 TEST UNIQUE : publication du sondage natif...");
           setTimeout(async () => {
             try {
-              console.log("✅ TEST QUIZ DIRECT RÉUSSI")
+              await publierQuizCanal(currentSock);
+              console.log("✅ TEST QUIZ DIRECT RÉUSSI");
             } catch (err) {
-              console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message)
+              console.error("❌ TEST QUIZ DIRECT ÉCHEC :", err.message);
             }
-          }, 3000)
+          }, 3000);
         }
-
-        registerDailyCron()
-        registerCanalQuizCron()
-
+        registerDailyCron();
+        registerCanalQuizCron();
       }
     })
 
@@ -467,7 +394,6 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
       console.log(`📩 ${from}: ${text}`)
 
       const upper = text.toUpperCase()
-  console.log("🧪 DEBUG TEXTE:", JSON.stringify(text), "UPPER:", JSON.stringify(upper), "GROUP:", isGroup)
     const botJid = jidNormalizedUser(sock.user.id)
     const ADMIN_LID = "130472835305511@lid"
 
@@ -489,39 +415,19 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
       }
 
       if (!isGroup && ['JOUER', 'JWE', 'QUIZ', 'JEU'].includes(upper)) {
-        if (!isSocketReady(sock)) {
-          console.log("⚠️ JOUER reçu mais WhatsApp est déconnecté.")
-          return
-        }
-
-        if (quizStartLocks.has(phone)) {
-          console.log(`⏳ JOUER ignoré : démarrage déjà en cours pour ${phone}`)
-          return
-        }
-
-        quizStartLocks.add(phone)
-
         try {
           const data = await callQuizApi({ action: 'start', phone })
-
           if (data.type === 'subscribe_required') {
             await sendSubscribeGate(sock, from)
           } else if (data.error) {
             await sock.sendMessage(from, { text: `⚠️ ${data.error}` })
           } else {
-            await sock.sendMessage(from, {
-              text: `🏆 *QUIZ BIBLIQUE EDILPA*\n\n${formatQuestion(data)}`
-            })
+            await sock.sendMessage(from, { text: `🏆 *QUIZ BIBLIQUE EDILPA*\n\n${formatQuestion(data)}` })
           }
         } catch (err) {
           console.error('Erreur quiz start:', err.message)
-          await sock.sendMessage(from, {
-            text: '⚠️ Erreur de connexion au quiz, réessaie.'
-          })
-        } finally {
-          quizStartLocks.delete(phone)
+          await sock.sendMessage(from, { text: '⚠️ Erreur de connexion au quiz, réessaie.' })
         }
-
         return
       }
 
@@ -536,51 +442,13 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
             const feedback = data.correct ? '✅ Bonne réponse ! +10 XP' : `❌ Mauvaise réponse\nBonne réponse : ${data.correct_letter}`
 
             if (data.type === 'finished') {
-              const score = Number(data.score) || 0
-              const total = Number(data.total) || 10
-              const bonnes = Math.round(score / 10)
-              const pourcentage = Math.round((bonnes / total) * 100)
-              const xpGagne = score
-              const xpTotal = data.xp_total ?? score
-              const niveau = data.niveau ?? "Débutant"
-
-              let progression = ''
-              if (pourcentage === 100) {
-                progression = '🔥 *Parfait !* Tu as répondu correctement à toutes les questions !'
-              } else if (pourcentage >= 80) {
-                progression = '🌟 *Excellent résultat !* Continue comme ça !'
-              } else if (pourcentage >= 60) {
-                progression = '👏 *Très bien !* Encore un peu d’effort pour atteindre le sommet.'
-              } else {
-                progression = '💪 *Courage !* Chaque partie te permet de progresser dans la Parole de Dieu.'
-              }
-
-              let recompenses = ''
-              if (data.niveau_up) {
-                recompenses += `\n🎉 *NIVEAU SUPÉRIEUR !*`
-              }
-
-              if (data.badge) {
-                recompenses += `\n🎁 *Nouveau badge :* ${data.badge.icone} ${data.badge.nom}`
-              }
+              let extra = `\nNiveau : ${data.niveau}`
+              if (data.niveau_up) extra += ` 🎉 (niveau supérieur !)`
+              extra += `\nXP total : ${data.xp_total}`
+              if (data.badge) extra += `\n\n🎁 Nouveau badge débloqué : ${data.badge.icone} *${data.badge.nom}*`
 
               await sock.sendMessage(from, {
-                text:
-                  `${feedback}\n\n` +
-                  `🏆 *QUIZ BIBLIQUE TERMINÉ*\n\n` +
-                  `📊 *Résultat*\n` +
-                  `✅ Bonnes réponses : *${bonnes}/${total}*\n` +
-                  `🎯 Réussite : *${pourcentage}%*\n\n` +
-                  `⭐ XP gagné : *+${xpGagne}*\n` +
-                  `💎 XP total : *${xpTotal}*\n` +
-                  `📈 Niveau : *${niveau}*` +
-                  `${recompenses}\n\n` +
-                  `${progression}\n\n` +
-                  `📖 Continue à apprendre et à grandir dans la Parole de Dieu.\n\n` +
-                  `🎮 _Écris JOUER pour commencer une nouvelle partie._\n\n` +
-                  `📢 *Parole & Défi*\n` +
-                  `Suis notre canal pour ne manquer aucune question du jour :\n` +
-                  `${CHANNEL_LINK}`
+                text: `${feedback}\n\n🏆 *QUIZ TERMINÉ*\n\nScore : ${data.score / 10}/${data.total}\nXP : +${data.score}${extra}\n\n_Écris JOUER pour rejouer_\n\n📢 Suis le canal *Parole & Défi* pour ne rater aucune question du jour :\n${CHANNEL_LINK}`
               })
             } else {
               await sock.sendMessage(from, { text: `${feedback}\n\n${formatQuestion(data)}` })
@@ -604,7 +472,7 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
     console.log(`⚠️ Erreur de démarrage (tentative ${attempt}): ${err.message}`)
     console.log('Nouvelle tentative dans 5s...')
     await sleep(getBackoffDelay(attempt))
-    startBot(attempt + 1).catch(err => console.error("❌ Erreur redémarrage bot:", err.message))
+    startBot(attempt + 1)
   }
 }
 
