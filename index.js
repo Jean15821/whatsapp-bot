@@ -542,7 +542,7 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
               const pourcentage = Math.round((bonnes / total) * 100)
               const xpGagne = score
               const xpTotal = data.xp_total ?? score
-              const niveau = data.niveau ?? "Débutant"
+              const niveau = Math.floor(Number(xpTotal) / 100) + 1
 
               let progression = ''
               if (pourcentage === 100) {
