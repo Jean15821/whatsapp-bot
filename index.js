@@ -138,11 +138,11 @@ function registerCanalQuizCron() {
     }
   };
 
-  // Ensuite, un nouveau quiz toutes les heures.
-  cron.schedule("0 * * * *", publierQuiz);
+  // 3 quiz par jour : 06h00, 12h00 et 18h00.
+  cron.schedule("0 6,12,18 * * *", publierQuiz, { timezone: "America/Port-au-Prince" });
 
   console.log(
-    "🧠 Quiz NATIF WhatsApp activé : toutes les heures"
+    "🧠 Quiz NATIF WhatsApp activé : 3 questions par jour (06h, 12h, 18h)"
   );
 }
 
