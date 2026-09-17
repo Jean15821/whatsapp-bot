@@ -102,6 +102,7 @@ let cronRegistered = false;
 
 // Empêche deux commandes JOUER simultanées pour le même numéro.
 const quizStartLocks = new Set();
+const quizAnswerLocks = new Set();
 let renderSessionRestored = false;
 function registerCanalQuizCron() {
   if (canalQuizCronRegistered) return;
@@ -528,10 +529,17 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
       const letter = ['A', 'B', 'C', 'D'].includes(upper) ? upper : DIGIT_TO_LETTER[text]
       if (!isGroup && letter) {
         try {
-          const data = await callQuizApi({ action: 'answer', phone, choice: letter })
+          if (quizAnswerLocks.has(phone)) {
+              return
+            }
+
+            quizAnswerLocks.add(phone)
+
+            const data = await callQuizApi({ action: 'answer', phone, choice: letter })
 
           if (data.error) {
             // pas de partie en cours -> fallthrough au chat normal
+              quizAnswerLocks.delete(phone)
           } else {
             const feedback = data.correct ? '✅ Bonne réponse ! +10 XP' : `❌ Mauvaise réponse\nBonne réponse : ${data.correct_letter}`
 
@@ -592,9 +600,11 @@ ${poll.explication || 'Continue à étudier la Parole de Dieu.'}
             } else {
               await sock.sendMessage(from, { text: `${feedback}\n\n${formatQuestion(data)}` })
             }
+            quizAnswerLocks.delete(phone)
             return
           }
         } catch (err) {
+          quizAnswerLocks.delete(phone)
           console.error('Erreur quiz answer:', err.message)
         }
       }
